@@ -1,8 +1,10 @@
 module PhysiCellCellCreator
 
-using LightXML, CSV, DataFrames, LinearAlgebra
+using LightXML, CSV, DataFrames, LinearAlgebra, Compat
 
 export generateICCell, createICCellXMLTemplate
+
+@compat public supportedPatchTypes, supportedPatchTextElements, supportedCarveoutTypes, supportedCarveoutTextElements
 
 function generateICCell(path_to_ic_cell_xml::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
     xml_doc = parse_file(path_to_ic_cell_xml)
@@ -37,17 +39,21 @@ struct EverywherePatch end
 
 supportedPatchTypes() = ["disc", "annulus", "rectangle", "everywhere"]
 
-function patchType(patch_type::String)
-    @assert patch_type in supportedPatchTypes() "Patch type $(patch_type) is not supported. Supported types are: $(supportedPatchTypes())"
-    if patch_type == "disc"
-        return DiscPatch
-    elseif patch_type == "annulus"
-        return AnnulusPatch
-    elseif patch_type == "rectangle"
-        return RectanglePatch
-    elseif patch_type == "everywhere"
-        return EverywherePatch
-    end
+supportedPatchTextElements(::Type{DiscPatch}) = ["x0", "y0", "z0", "radius", "number", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_radius", "outer_radius", "number", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height", "number", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{EverywherePatch}) = ["number", "normal", "max_fails"]
+
+supportedPatchTextElements(patch_type::String) = supportedPatchTextElements(patchType(patch_type))
+
+patchType(::Val{:disc}) = DiscPatch
+patchType(::Val{:annulus}) = AnnulusPatch
+patchType(::Val{:rectangle}) = RectanglePatch
+patchType(::Val{:everywhere}) = EverywherePatch
+
+function patchType(s::AbstractString)
+    @assert s in supportedPatchTypes() "Patch type $(s) is not supported. Supported types are: $(supportedPatchTypes())"
+    return patchType(Val(Symbol(s)))
 end
 
 function parseCenter(patch::XMLElement)
@@ -64,9 +70,7 @@ function parseNormal(patch::XMLElement, cell_type::String)
     else
         normal_vector = content(normal) |> x -> split(x, ",") |> x -> parse.(Float64, x)
         magnitude = sqrt(sum(normal_vector.^2))
-        if magnitude == 0
-            throw(ArgumentError("A normal vector provided for $(cell_type) with patch ID $(attribute(patch, "ID")) is 0. It must be non-zero."))
-        end
+        @assert magnitude > 0 "A normal vector provided for $(cell_type) with patch ID $(attribute(patch, "ID")) is 0. It must be non-zero."
         return normal_vector ./ magnitude
     end
 end
@@ -77,11 +81,8 @@ function parseRestrictToDomain(patch::XMLElement, cell_type::String)
         return true
     end
     restrict_string = content(restrict_to_domain)
-    if restrict_string in ["0", "1", "true", "false"]
-        return parse(Bool, restrict_string)
-    else
-        throw(ArgumentError("restrict_to_domain for $(cell_type) with patch ID $(attribute(patch, "ID")) must be a boolean."))
-    end
+    @assert restrict_string ∈ ["0", "1", "true", "false"] "restrict_to_domain for $(cell_type) with patch ID $(attribute(patch, "ID")) must be a boolean."
+    return parse(Bool, restrict_string)
 end
 
 function parseMaxFails(patch::XMLElement)
@@ -107,9 +108,7 @@ function parseRectangleSize(patch::XMLElement, c0::Float64, size_name::String, c
         return parse(Float64, content(size_element))
     end
     c1 = find_element(patch, c1_name)
-    if isnothing(c1)
-        throw(ArgumentError("Rectangle patch must have either a $(size_name) or $(c1_name) element."))
-    end
+    @assert !isnothing(c1) "Rectangle patch must have either a $(size_name) or $(c1_name) element."
     return parse(Float64, content(c1)) - c0
 end
 
@@ -138,6 +137,23 @@ struct RectangleCarveout <: PatchCarveout
     height::Float64
 end
 
+supportedCarveoutTypes() = ["disc", "annulus", "rectangle"]
+
+supportedCarveoutTextElements(::Type{DiscCarveout}) = ["x0", "y0", "z0", "radius"]
+supportedCarveoutTextElements(::Type{AnnulusCarveout}) = ["x0", "y0", "z0", "inner_radius", "outer_radius"]
+supportedCarveoutTextElements(::Type{RectangleCarveout}) = ["x0", "y0", "z0", "x1", "y1", "width", "height"]
+
+supportedCarveoutTextElements(patch_type::String) = supportedCarveoutTextElements(carveoutType(patch_type))
+
+carveoutType(::Val{:disc}) = DiscCarveout
+carveoutType(::Val{:annulus}) = AnnulusCarveout
+carveoutType(::Val{:rectangle}) = RectangleCarveout
+
+function carveoutType(s::AbstractString)
+    @assert s in supportedCarveoutTypes() "Patch type $(s) is not supported for carveouts. Supported types are: $(supportedCarveoutTypes())"
+    return carveoutType(Val(Symbol(s)))
+end
+
 function parseCarveouts(patch::XMLElement)
     carveout_patches = find_element(patch, "carveout_patches")
     if isnothing(carveout_patches)
@@ -152,25 +168,27 @@ end
 
 function parseCarveoutPatchCollection(patch_collection::XMLElement)
     patch_type = attribute(patch_collection, "type")
-    carveouts = PatchCarveout[]
-    for patch in child_elements(patch_collection)
-        if patch_type == "disc"
-            x0, y0, z0 = parseCenter(patch)
-            radius = parse(Float64, find_element(patch, "radius") |> content)
-            push!(carveouts, DiscCarveout(x0, y0, z0, radius))
-        elseif patch_type == "annulus"
-            x0, y0, z0 = parseCenter(patch)
-            inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
-            outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
-            push!(carveouts, AnnulusCarveout(x0, y0, z0, inner_radius, outer_radius))
-        elseif patch_type == "rectangle"
-            x0, y0, z0, width, height = parseRectangleParameters(patch)
-            push!(carveouts, RectangleCarveout(x0, y0, z0, width, height))
-        else
-            throw(ArgumentError("Patch type $(patch_type) is not supported."))
-        end
-    end
-    return carveouts
+    @assert patch_type in ["disc", "annulus", "rectangle"] "Patch type $(patch_type) is not supported for carveouts. Supported types are: $(supportedCarveoutTypes())."
+    return PatchCarveout[createCarveoutPatch(carveoutType(patch_type), patch)
+                         for patch in child_elements(patch_collection)]
+end
+
+function createCarveoutPatch(::Type{DiscCarveout}, patch::XMLElement)
+    x0, y0, z0 = parseCenter(patch)
+    radius = parse(Float64, find_element(patch, "radius") |> content)
+    return DiscCarveout(x0, y0, z0, radius)
+end
+
+function createCarveoutPatch(::Type{AnnulusCarveout}, patch::XMLElement)
+    x0, y0, z0 = parseCenter(patch)
+    inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
+    outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
+    return AnnulusCarveout(x0, y0, z0, inner_radius, outer_radius)
+end
+
+function createCarveoutPatch(::Type{RectangleCarveout}, patch::XMLElement)
+    x0, y0, z0, width, height = parseRectangleParameters(patch)
+    return RectangleCarveout(x0, y0, z0, width, height)
 end
 
 function carveOut(df::DataFrame, carveout::DiscCarveout)
@@ -262,9 +280,7 @@ end
 function generatePatch(::Type{AnnulusPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
     inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
     outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
-    if inner_radius > outer_radius
-        throw(ArgumentError("Inner radius of annulus is greater than outer radius."))
-    end
+    @assert inner_radius <= outer_radius "Inner radius must be less than or equal to outer radius. Got inner_radius=$(inner_radius) > outer_radius=$(outer_radius)."
     r_fn(number) = sqrt.(inner_radius^2 .+ (outer_radius^2 - inner_radius^2) * rand(number))
     placeAnnulus(r_fn, patch, cell_type, path_to_ic_cell_file, domain_dict)
 end
