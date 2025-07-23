@@ -8,7 +8,7 @@ makedocs(;
     authors="Daniel Bergman <danielrbergman@gmail.com> and contributors",
     sitename="PhysiCellCellCreator.jl",
     format=Documenter.HTML(;
-        canonical="https://drbergman.github.io/PhysiCellCellCreator.jl",
+        canonical="https://drbergman-lab.github.io/PhysiCellCellCreator.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -21,6 +21,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/drbergman/PhysiCellCellCreator.jl",
+    repo="github.com/drbergman-lab/PhysiCellCellCreator.jl",
     devbranch="development",
 )
