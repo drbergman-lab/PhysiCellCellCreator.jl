@@ -22,5 +22,5 @@ makedocs(;
 
 deploydocs(;
     repo="github.com/drbergman-lab/PhysiCellCellCreator.jl",
-    devbranch="development",
+    devbranch="main",
 )
