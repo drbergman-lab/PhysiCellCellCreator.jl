@@ -4,7 +4,7 @@ You can create a simple XML by running
 ```julia
 using PhysiCellCellCreator
 path_to_folder = "template_folder"
-createICCellXMLTemplate(path_to_folder) # will create ecm.xml inside the folder "template_folder"
+createICCellXMLTemplate(path_to_folder) # will create cells.xml inside the folder "template_folder"
 ```
 
 Then, you can edit the XML file as needed.
@@ -27,9 +27,11 @@ Depending on the type of patch, the patch may have different parameters.
 ### `everywhere`
 The `everywhere` patch just has a `number` element, specifying the number of cells to place everywhere.
 ```xml
-<patch ID="1" type="everywhere">
-    <number>100</number>
-</patch>
+<patch_collection type="everywhere">
+  <patch ID="1">
+      <number>100</number>
+  </patch>
+</patch_collection>
 ```
 
 ### `disc`
@@ -38,13 +40,15 @@ The `disc` patch has the following parameters:
 - `radius`: the radius of the disc
 - `number`: the number of cells to place in the disc
 ```xml
-<patch ID="1" type="disc">
-    <x0>100.0</x0>
-    <y0>100.0</y0>
-    <z0>0.0</z0>
-    <radius>50.0</radius>
-    <number>50</number>
-</patch>
+<patch_collection type="disc">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <radius>50.0</radius>
+      <number>50</number>
+  </patch>
+</patch_collection>
 ```
 
 A `disc` patch can also have a `normal` element, defining the normal vector of the disc.
@@ -55,14 +59,16 @@ Note: the `disc` really is a 2D disc, not a solid sphere even if the PhysiCell s
 ### `annulus`
 The `annulus` patch has identical parameters to the `disc` patch, but with `radius` replaced by `inner_radius` and `outer_radius`.
 ```xml
-<patch ID="1" type="annulus">
-    <x0>100.0</x0>
-    <y0>100.0</y0>
-    <z0>0.0</z0>
-    <inner_radius>50.0</inner_radius>
-    <outer_radius>100.0</outer_radius>
-    <number>50</number>
-</patch>
+<patch_collection type="annulus">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <inner_radius>50.0</inner_radius>
+      <outer_radius>100.0</outer_radius>
+      <number>50</number>
+  </patch>
+</patch_collection>
 ```
 
 ### `rectangle`
@@ -72,14 +78,16 @@ The `rectangle` patch is assumed to be parallel to the xy-plane and has the foll
 - `width`, `height`: the width and height of the rectangle in the x and y directions, respectively
 - `number`: the number of cells to place in the rectangle
 ```xml
-<patch ID="1" type="rectangle">
-    <x0>100.0</x0>
-    <y0>100.0</y0>
-    <z0>0.0</z0>
-    <width>50.0</width>
-    <height>100.0</height>
-    <number>50</number>
-</patch>
+<patch_collection type="rectangle">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <width>50.0</width>
+      <height>100.0</height>
+      <number>50</number>
+  </patch>
+</patch_collection>
 ```
 
 Note: this patch will place cells with x-coordinate in [100.0, 150.0] and y-coordinate in [100.0, 200.0].
@@ -100,23 +108,25 @@ These follow the same structure as the patches above, but do not contain a `numb
 
 To add a carveout to a patch, add a `<carveout_patches>` element to the patch, then follow the same XML structure as the patches above.
 ```xml
-<patch ID="1" type="disc">
-    <x0>100.0</x0>
-    <y0>100.0</y0>
-    <z0>0.0</z0>
-    <radius>50.0</radius>
-    <number>50</number>
-    <carveout_patches>
-        <patch_collections type="disc">
-            <patch ID="1">
-                <x0>130.0</x0>
-                <y0>130.0</y0>
-                <z0>0.0</z0>
-                <radius>15.0</radius>
-            </patch>
-        </patch_collections>
-    </carveout_patches>
-</patch>
+<patch_collection type="disc">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <radius>50.0</radius>
+      <number>50</number>
+      <carveout_patches>
+          <patch_collections type="disc">
+              <patch ID="1">
+                  <x0>130.0</x0>
+                  <y0>130.0</y0>
+                  <z0>0.0</z0>
+                  <radius>15.0</radius>
+              </patch>
+          </patch_collections>
+      </carveout_patches>
+  </patch>
+</patch_collection>
 ```
 
 ### Max fails
