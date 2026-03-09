@@ -6,7 +6,7 @@ export generateICCell, createICCellXMLTemplate
 
 @compat public supportedPatchTypes, supportedPatchTextElements, supportedCarveoutTypes, supportedCarveoutTextElements
 
-function generateICCell(path_to_ic_cell_xml::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generateICCell(path_to_ic_cell_xml::AbstractString, path_to_ic_cell_file::AbstractString, domain_dict::Dict{<:AbstractString,<:Real})
     xml_doc = parse_file(path_to_ic_cell_xml)
     ic_cells = root(xml_doc)
     open(path_to_ic_cell_file, "w") do io
@@ -18,14 +18,14 @@ function generateICCell(path_to_ic_cell_xml::String, path_to_ic_cell_file::Strin
     free(xml_doc)
 end
 
-function generateCellPatches(cell_patches::XMLElement, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generateCellPatches(cell_patches::XMLElement, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     cell_type = attribute(cell_patches, "name")
     for patch_collection in child_elements(cell_patches)
         generatePatchCollection(patch_collection, cell_type, path_to_ic_cell_file, domain_dict)
     end
 end
 
-function generatePatchCollection(patch_collection::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generatePatchCollection(patch_collection::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     patch_type = attribute(patch_collection, "type")
     for patch in child_elements(patch_collection)
         generatePatch(patchType(patch_type), patch, cell_type, path_to_ic_cell_file, domain_dict)
@@ -44,7 +44,7 @@ supportedPatchTextElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_rad
 supportedPatchTextElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height", "number", "normal", "max_fails", "restrict_to_domain"]
 supportedPatchTextElements(::Type{EverywherePatch}) = ["number", "normal", "max_fails"]
 
-supportedPatchTextElements(patch_type::String) = supportedPatchTextElements(patchType(patch_type))
+supportedPatchTextElements(patch_type::AbstractString) = supportedPatchTextElements(patchType(patch_type))
 
 patchType(::Val{:disc}) = DiscPatch
 patchType(::Val{:annulus}) = AnnulusPatch
@@ -69,7 +69,7 @@ function parseNormal(patch::XMLElement, cell_type::String)
         return [0.0, 0.0, 1.0]
     else
         normal_vector = content(normal) |> x -> split(x, ",") |> x -> parse.(Float64, x)
-        magnitude = sqrt(sum(normal_vector.^2))
+        magnitude = sqrt(sum(normal_vector .^ 2))
         @assert magnitude > 0 "A normal vector provided for $(cell_type) with patch ID $(attribute(patch, "ID")) is 0. It must be non-zero."
         return normal_vector ./ magnitude
     end
@@ -143,7 +143,7 @@ supportedCarveoutTextElements(::Type{DiscCarveout}) = ["x0", "y0", "z0", "radius
 supportedCarveoutTextElements(::Type{AnnulusCarveout}) = ["x0", "y0", "z0", "inner_radius", "outer_radius"]
 supportedCarveoutTextElements(::Type{RectangleCarveout}) = ["x0", "y0", "z0", "x1", "y1", "width", "height"]
 
-supportedCarveoutTextElements(patch_type::String) = supportedCarveoutTextElements(carveoutType(patch_type))
+supportedCarveoutTextElements(patch_type::AbstractString) = supportedCarveoutTextElements(carveoutType(patch_type))
 
 carveoutType(::Val{:disc}) = DiscCarveout
 carveoutType(::Val{:annulus}) = AnnulusCarveout
@@ -192,13 +192,13 @@ function createCarveoutPatch(::Type{RectangleCarveout}, patch::XMLElement)
 end
 
 function carveOut(df::DataFrame, carveout::DiscCarveout)
-        keep_ind = sqrt.((df.x .- carveout.x0).^2 + (df.y .- carveout.y0).^2 + (df.z .- carveout.z0).^2) .> carveout.radius
-        return df[keep_ind, :]
+    keep_ind = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .> carveout.radius
+    return df[keep_ind, :]
 end
 
 function carveOut(df::DataFrame, carveout::AnnulusCarveout)
-    keep_ind = sqrt.((df.x .- carveout.x0).^2 + (df.y .- carveout.y0).^2 + (df.z .- carveout.z0).^2) .> carveout.outer_radius .||
-               sqrt.((df.x .- carveout.x0).^2 + (df.y .- carveout.y0).^2 + (df.z .- carveout.z0).^2) .< carveout.inner_radius
+    keep_ind = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .> carveout.outer_radius .||
+               sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .< carveout.inner_radius
     return df[keep_ind, :]
 end
 
@@ -208,7 +208,7 @@ function carveOut(df::DataFrame, carveout::RectangleCarveout)
     return df[keep_ind, :]
 end
 
-function createCellsDataFrame(number::Int, cell_coords_fn::Function, restrict_to_domain::Bool, domain_dict::Dict{String,Float64}, carveouts::Vector{PatchCarveout}, max_fails::Int)
+function createCellsDataFrame(number::Int, cell_coords_fn::Function, restrict_to_domain::Bool, domain_dict::Dict{<:AbstractString,<:Real}, carveouts::Vector{PatchCarveout}, max_fails::Int)
     total_placed = 0
     df = DataFrame(x=Float64[], y=Float64[], z=Float64[])
     fails_remaining = max_fails
@@ -237,7 +237,7 @@ function createCellsDataFrame(number::Int, cell_coords_fn::Function, restrict_to
     return df
 end
 
-function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     x0, y0, z0 = parseCenter(patch)
     number = parse(Int, find_element(patch, "number") |> content)
     normal_vector = parseNormal(patch, cell_type)
@@ -247,9 +247,9 @@ function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String,
     cell_coords_fn(n::Int) = begin
         r = radius_fn(n)
         θ = 2π * rand(n)
-    
+
         # start in the (x,y) plane at the origin
-        c1 = r .* cos.(θ) 
+        c1 = r .* cos.(θ)
         c2 = r .* sin.(θ)
         if normal_vector[1] != 0 || normal_vector[2] != 0
             u₁ = [normal_vector[2], -normal_vector[1], 0] / sqrt(normal_vector[1]^2 + normal_vector[2]^2) # first basis vector in the plane of the disc
@@ -265,19 +265,19 @@ function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String,
     end
 
     carveouts = parseCarveouts(patch)
-    
+
     df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
     df[!, :cell_type] .= cell_type
     CSV.write(path_to_ic_cell_file, df, append=true, header=false)
 end
 
-function generatePatch(::Type{DiscPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generatePatch(::Type{DiscPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     radius = parse(Float64, find_element(patch, "radius") |> content)
     r_fn(number) = radius * sqrt.(rand(number))
     placeAnnulus(r_fn, patch, cell_type, path_to_ic_cell_file, domain_dict)
 end
 
-function generatePatch(::Type{AnnulusPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generatePatch(::Type{AnnulusPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
     outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
     @assert inner_radius <= outer_radius "Inner radius must be less than or equal to outer radius. Got inner_radius=$(inner_radius) > outer_radius=$(outer_radius)."
@@ -285,7 +285,7 @@ function generatePatch(::Type{AnnulusPatch}, patch::XMLElement, cell_type::Strin
     placeAnnulus(r_fn, patch, cell_type, path_to_ic_cell_file, domain_dict)
 end
 
-function generatePatch(::Type{RectanglePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generatePatch(::Type{RectanglePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     x0, y0, z0, width, height = parseRectangleParameters(patch)
     number = parse(Int, find_element(patch, "number") |> content)
     restrict_to_domain = parseRestrictToDomain(patch, cell_type)
@@ -305,7 +305,7 @@ function generatePatch(::Type{RectanglePatch}, patch::XMLElement, cell_type::Str
     CSV.write(path_to_ic_cell_file, df, append=true, header=false)
 end
 
-function generatePatch(::Type{EverywherePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{String,Float64})
+function generatePatch(::Type{EverywherePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
     number = parse(Int, find_element(patch, "number") |> content)
     restrict_to_domain = false
     max_fails = parseMaxFails(patch)
@@ -325,7 +325,7 @@ function generatePatch(::Type{EverywherePatch}, patch::XMLElement, cell_type::St
 end
 
 """
-    createICCellXMLTemplate(folder::String)
+    createICCellXMLTemplate(folder::AbstractString)
 
 Create folder `path_to_folder` and create a template XML file for IC cells.
 
@@ -335,7 +335,7 @@ This function creates a template XML file for IC cells, showing all the current 
 It uses the cell type \"default\".
 Create ICs for more cell types by copying the `cell_patches` element.
 """
-function createICCellXMLTemplate(path_to_folder::String)
+function createICCellXMLTemplate(path_to_folder::AbstractString)
     path_to_ic_cell_xml = joinpath(path_to_folder, "cells.xml")
     mkpath(dirname(path_to_ic_cell_xml))
     xml_doc = XMLDocument()
@@ -414,7 +414,7 @@ function createICCellXMLTemplate(path_to_folder::String)
         e = new_child(e_carveout_patch, name)
         set_content(e, value)
     end
-    
+
     save_file(xml_doc, path_to_ic_cell_xml)
     free(xml_doc)
 end
