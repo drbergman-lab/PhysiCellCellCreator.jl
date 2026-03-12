@@ -6,29 +6,32 @@ export generateICCell, createICCellXMLTemplate
 
 @compat public supportedPatchTypes, supportedPatchTextElements, supportedCarveoutTypes, supportedCarveoutTextElements
 
-function generateICCell(path_to_ic_cell_xml::AbstractString, path_to_ic_cell_file::AbstractString, domain_dict::Dict{<:AbstractString,<:Real})
+function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}; output::Union{Nothing,AbstractString}=nothing)
+    sink = isnothing(output) ? DataFrame : CSV.write(output)
     xml_doc = parse_file(path_to_ic_cell_xml)
     ic_cells = root(xml_doc)
-    open(path_to_ic_cell_file, "w") do io
-        println(io, "x,y,z,type")
-    end
+    df = DataFrame(x=Float64[], y=Float64[], z=Float64[], cell_type=String[])
     for cell_patches in child_elements(ic_cells)
-        generateCellPatches(cell_patches, path_to_ic_cell_file, domain_dict)
+        generateCellPatches!(df, cell_patches, domain_dict)
     end
     free(xml_doc)
+
+    return sink(df)
 end
 
-function generateCellPatches(cell_patches::XMLElement, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+@deprecate generateICCell(path_to_ic_cell_xml::AbstractString, path_to_output::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}) generateICCell(path_to_ic_cell_xml, domain_dict; output=path_to_output)
+
+function generateCellPatches!(df::DataFrame, cell_patches::XMLElement, domain_dict::Dict{<:AbstractString,<:Real})
     cell_type = attribute(cell_patches, "name")
     for patch_collection in child_elements(cell_patches)
-        generatePatchCollection(patch_collection, cell_type, path_to_ic_cell_file, domain_dict)
+        generatePatchCollection!(df, patch_collection, cell_type, domain_dict)
     end
 end
 
-function generatePatchCollection(patch_collection::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function generatePatchCollection!(df::DataFrame, patch_collection::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     patch_type = attribute(patch_collection, "type")
     for patch in child_elements(patch_collection)
-        generatePatch(patchType(patch_type), patch, cell_type, path_to_ic_cell_file, domain_dict)
+        generatePatch!(patchType(patch_type), df, patch, cell_type, domain_dict)
     end
 end
 
@@ -237,7 +240,7 @@ function createCellsDataFrame(number::Int, cell_coords_fn::Function, restrict_to
     return df
 end
 
-function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function placeAnnulus!(df::DataFrame, radius_fn::Function, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     x0, y0, z0 = parseCenter(patch)
     number = parse(Int, find_element(patch, "number") |> content)
     normal_vector = parseNormal(patch, cell_type)
@@ -251,41 +254,41 @@ function placeAnnulus(radius_fn::Function, patch::XMLElement, cell_type::String,
         # start in the (x,y) plane at the origin
         c1 = r .* cos.(θ)
         c2 = r .* sin.(θ)
-        if normal_vector[1] != 0 || normal_vector[2] != 0
+        _df = if normal_vector[1] != 0 || normal_vector[2] != 0
             u₁ = [normal_vector[2], -normal_vector[1], 0] / sqrt(normal_vector[1]^2 + normal_vector[2]^2) # first basis vector in the plane of the disc
             u₂ = cross(normal_vector, u₁) # second basis vector in the plane of the disc
-            df = DataFrame(x=c1 * u₁[1] + c2 * u₂[1], y=c1 * u₁[2] + c2 * u₂[2], z=c1 * u₁[3] + c2 * u₂[3])
+            DataFrame(x=c1 * u₁[1] + c2 * u₂[1], y=c1 * u₁[2] + c2 * u₂[2], z=c1 * u₁[3] + c2 * u₂[3])
         else
-            df = DataFrame(x=c1, y=c2, z=fill(z0, n))
+            DataFrame(x=c1, y=c2, z=fill(z0, n))
         end
-        df.x .+= x0
-        df.y .+= y0
-        df.z .+= z0
-        return df
+        _df.x .+= x0
+        _df.y .+= y0
+        _df.z .+= z0
+        return _df
     end
 
     carveouts = parseCarveouts(patch)
 
-    df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    df[!, :cell_type] .= cell_type
-    CSV.write(path_to_ic_cell_file, df, append=true, header=false)
+    cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
+    cell_df[!, :cell_type] .= cell_type
+    append!(df, cell_df)
 end
 
-function generatePatch(::Type{DiscPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function generatePatch!(::Type{DiscPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     radius = parse(Float64, find_element(patch, "radius") |> content)
     r_fn(number) = radius * sqrt.(rand(number))
-    placeAnnulus(r_fn, patch, cell_type, path_to_ic_cell_file, domain_dict)
+    placeAnnulus!(df, r_fn, patch, cell_type, domain_dict)
 end
 
-function generatePatch(::Type{AnnulusPatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function generatePatch!(::Type{AnnulusPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
     outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
     @assert inner_radius <= outer_radius "Inner radius must be less than or equal to outer radius. Got inner_radius=$(inner_radius) > outer_radius=$(outer_radius)."
     r_fn(number) = sqrt.(inner_radius^2 .+ (outer_radius^2 - inner_radius^2) * rand(number))
-    placeAnnulus(r_fn, patch, cell_type, path_to_ic_cell_file, domain_dict)
+    placeAnnulus!(df, r_fn, patch, cell_type, domain_dict)
 end
 
-function generatePatch(::Type{RectanglePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function generatePatch!(::Type{RectanglePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     x0, y0, z0, width, height = parseRectangleParameters(patch)
     number = parse(Int, find_element(patch, "number") |> content)
     restrict_to_domain = parseRestrictToDomain(patch, cell_type)
@@ -300,12 +303,12 @@ function generatePatch(::Type{RectanglePatch}, patch::XMLElement, cell_type::Str
 
     carveouts = parseCarveouts(patch)
 
-    df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    df[!, :cell_type] .= cell_type
-    CSV.write(path_to_ic_cell_file, df, append=true, header=false)
+    cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
+    cell_df[!, :cell_type] .= cell_type
+    append!(df, cell_df)
 end
 
-function generatePatch(::Type{EverywherePatch}, patch::XMLElement, cell_type::String, path_to_ic_cell_file::String, domain_dict::Dict{<:AbstractString,<:Real})
+function generatePatch!(::Type{EverywherePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real})
     number = parse(Int, find_element(patch, "number") |> content)
     restrict_to_domain = false
     max_fails = parseMaxFails(patch)
@@ -319,9 +322,9 @@ function generatePatch(::Type{EverywherePatch}, patch::XMLElement, cell_type::St
 
     carveouts = parseCarveouts(patch)
 
-    df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    df[!, :cell_type] .= cell_type
-    CSV.write(path_to_ic_cell_file, df, append=true, header=false)
+    cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
+    cell_df[!, :cell_type] .= cell_type
+    append!(df, cell_df)
 end
 
 """
