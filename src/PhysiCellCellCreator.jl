@@ -10,7 +10,7 @@ function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<
     sink = isnothing(output) ? DataFrame : CSV.write(output)
     xml_doc = parse_file(path_to_ic_cell_xml)
     ic_cells = root(xml_doc)
-    df = DataFrame(x=Float64[], y=Float64[], z=Float64[], cell_type=String[])
+    df = DataFrame(x=Float64[], y=Float64[], z=Float64[], type=String[])
     for cell_patches in child_elements(ic_cells)
         generateCellPatches!(df, cell_patches, domain_dict)
     end
@@ -270,7 +270,7 @@ function placeAnnulus!(df::DataFrame, radius_fn::Function, patch::XMLElement, ce
     carveouts = parseCarveouts(patch)
 
     cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    cell_df[!, :cell_type] .= cell_type
+    cell_df[!, :type] .= cell_type
     append!(df, cell_df)
 end
 
@@ -304,7 +304,7 @@ function generatePatch!(::Type{RectanglePatch}, df::DataFrame, patch::XMLElement
     carveouts = parseCarveouts(patch)
 
     cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    cell_df[!, :cell_type] .= cell_type
+    cell_df[!, :type] .= cell_type
     append!(df, cell_df)
 end
 
@@ -323,7 +323,7 @@ function generatePatch!(::Type{EverywherePatch}, df::DataFrame, patch::XMLElemen
     carveouts = parseCarveouts(patch)
 
     cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
-    cell_df[!, :cell_type] .= cell_type
+    cell_df[!, :type] .= cell_type
     append!(df, cell_df)
 end
 
