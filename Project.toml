@@ -1,7 +1,7 @@
 name = "PhysiCellCellCreator"
 uuid = "eac91067-0c6e-4a29-b848-3b4e7cf67017"
 authors = ["Daniel Bergman <danielrbergman@gmail.com> and contributors"]
-version = "0.0.8"
+version = "0.0.9"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
