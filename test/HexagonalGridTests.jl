@@ -143,10 +143,67 @@ end
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=1.0)
     @test all(isapprox.(nearestNeighborDistances(df), 10.0; atol=1e-8))
 
+    # non-Real value in the Dict for this cell type
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0"])
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain; cell_radius=Dict{String,Any}("default" => "6.0"))
+    # Dict{String,Any} with Real values is accepted
+    df = generateICCell(hex_xml, hex_domain; cell_radius=Dict{String,Any}("default" => 6), spacing_factor=1.0)
+    @test all(isapprox.(nearestNeighborDistances(df), 12.0; atol=1e-8))
+
     # cell_radius is ignored by random placement
     writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "20"]; placement=nothing)
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0)
     @test size(df, 1) == 20
+end
+
+@testset "per-cell-type radii across multiple cell types" begin
+    # two cell types, each with its own hexagonal disc far from the other, radii given per type
+    xml_doc = XMLDocument()
+    xml_root = create_root(xml_doc, "ic_cells")
+    for (cell_type, x0) in [("alpha", "-200.0"), ("beta", "200.0")]
+        e_patches = new_child(xml_root, "cell_patches")
+        set_attribute(e_patches, "name", cell_type)
+        e_collection = new_child(e_patches, "patch_collection")
+        set_attribute(e_collection, "type", "disc")
+        e_patch = new_child(e_collection, "patch")
+        set_attribute(e_patch, "ID", "1")
+        set_attribute(e_patch, "placement", "hexagonal")
+        for (name, value) in ["x0" => x0, "y0" => "0.0", "z0" => "0.0", "radius" => "40.0"]
+            set_content(new_child(e_patch, name), value)
+        end
+    end
+    save_file(xml_doc, hex_xml)
+    free(xml_doc)
+    df = generateICCell(hex_xml, hex_domain; cell_radius=Dict("alpha" => 5.0, "beta" => 8.0), spacing_factor=1.0)
+    df_alpha = df[df.type .== "alpha", :]
+    df_beta = df[df.type .== "beta", :]
+    @test size(df_alpha, 1) > size(df_beta, 1) > 0
+    @test all(isapprox.(nearestNeighborDistances(df_alpha), 10.0; atol=1e-8))
+    @test all(isapprox.(nearestNeighborDistances(df_beta), 16.0; atol=1e-8))
+    # missing one of the cell types errors
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain; cell_radius=Dict("alpha" => 5.0))
+end
+
+@testset "lattice size guard and boundary tolerance" begin
+    # a spacing typo that would generate billions of points errors instead of hanging
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "400.0", "spacing" => "0.001"])
+    @test_throws ArgumentError generateICCell(hex_xml, hex_domain)
+    # lattice points on the boundary are kept despite floating-point rounding (3 * 0.05 != 0.15 exactly)
+    writePatchXML(hex_xml, "rectangle", ["x0" => "-0.15", "y0" => "-0.15", "z0" => "0.0", "width" => "0.3", "height" => "0.3", "spacing" => "0.05"])
+    df = generateICCell(hex_xml, hex_domain)
+    @test any(isapprox.(df.x, 0.15; atol=1e-12) .&& isapprox.(df.y, 0.0; atol=1e-12))
+    @test any(isapprox.(df.x, -0.15; atol=1e-12) .&& isapprox.(df.y, 0.0; atol=1e-12))
+    # a disc whose radius lands exactly on a lattice ring keeps that ring
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "0.3", "spacing" => "0.1"])
+    df = generateICCell(hex_xml, hex_domain)
+    @test count(isapprox.(sqrt.(df.x .^ 2 .+ df.y .^ 2), 0.3; atol=1e-9)) == 6
+end
+
+@testset "flipped rectangle errors in both modes" begin
+    writePatchXML(hex_xml, "rectangle", ["x0" => "50.0", "y0" => "-50.0", "z0" => "0.0", "x1" => "-50.0", "y1" => "50.0", "spacing" => "10.0"])
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain)
+    writePatchXML(hex_xml, "rectangle", ["x0" => "50.0", "y0" => "-50.0", "z0" => "0.0", "x1" => "-50.0", "y1" => "50.0", "number" => "10"]; placement=nothing)
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain)
 end
 
 @testset "incompatible and invalid placement settings" begin

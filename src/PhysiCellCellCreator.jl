@@ -11,7 +11,7 @@ export generateICCell, createICCellXMLTemplate
 
 Accepted types for the `cell_radius` keyword argument of [`generateICCell`](@ref): `nothing`, a single `Real`, or a `Dict` mapping cell type names to radii.
 """
-const CellRadius = Union{Nothing,Real,AbstractDict{<:AbstractString,<:Real}}
+const CellRadius = Union{Nothing,Real,AbstractDict}
 
 """
     HexagonalDefaults
@@ -25,7 +25,12 @@ end
 
 resolveCellRadius(::Nothing, ::String) = nothing
 resolveCellRadius(cell_radius::Real, ::String) = Float64(cell_radius)
-resolveCellRadius(cell_radius::AbstractDict{<:AbstractString,<:Real}, cell_type::String) = haskey(cell_radius, cell_type) ? Float64(cell_radius[cell_type]) : nothing
+function resolveCellRadius(cell_radius::AbstractDict, cell_type::String)
+    haskey(cell_radius, cell_type) || return nothing
+    radius = cell_radius[cell_type]
+    @assert radius isa Real "cell_radius for $(cell_type) must be a Real. Got $(radius) of type $(typeof(radius))."
+    return Float64(radius)
+end
 
 """
     generateICCell(path_to_ic_cell_xml, domain_dict; output=nothing, cell_radius=nothing, spacing_factor=0.95)
@@ -182,25 +187,46 @@ function parseHexagonalGrid(patch::XMLElement, cell_type::String, hex_defaults::
 end
 
 """
+    max_hexagonal_grid_points
+
+Upper bound on the number of lattice points a single hexagonal grid patch may generate before `hexagonalGridPoints` throws, guarding against a mistyped `spacing` exhausting memory.
+"""
+const max_hexagonal_grid_points = 10_000_000
+
+"""
+    boundary_tolerance
+
+Relative tolerance (as a fraction of the spacing) used when deciding whether a lattice point lies on the boundary of a patch.
+"""
+const boundary_tolerance = 1e-10
+
+"""
     hexagonalGridPoints(spacing, half_width, half_height)
 
 Return the `(c1, c2)` coordinates of a hexagonal lattice with the given `spacing` covering `[-half_width, half_width] x [-half_height, half_height]`.
 
 The lattice has a point at the origin, rows parallel to the first axis separated by `spacing * sqrt(3) / 2`, and alternating rows offset by `spacing / 2`.
+Points on the boundary are kept, with a small tolerance so floating-point rounding does not drop them.
+An `ArgumentError` is thrown if the lattice would exceed `max_hexagonal_grid_points` points, which almost certainly indicates a spacing typo.
 """
 function hexagonalGridPoints(spacing::Float64, half_width::Float64, half_height::Float64)
     row_height = spacing * sqrt(3) / 2
     n_rows = ceil(Int, half_height / row_height)
     n_cols = ceil(Int, half_width / spacing) + 1
+    n_points_bound = (2 * n_rows + 1) * (2 * n_cols + 1)
+    if n_points_bound > max_hexagonal_grid_points
+        throw(ArgumentError("A hexagonal grid with spacing $(spacing) over a $(2 * half_width) x $(2 * half_height) region would have up to $(n_points_bound) points, exceeding the limit of $(max_hexagonal_grid_points). Check the spacing."))
+    end
+    tol = boundary_tolerance * spacing
     c1 = Float64[]
     c2 = Float64[]
     for j in -n_rows:n_rows
         y = j * row_height
-        abs(y) <= half_height || continue
+        abs(y) <= half_height + tol || continue
         offset = isodd(j) ? spacing / 2 : 0.0
         for i in -n_cols:n_cols
             x = i * spacing + offset
-            abs(x) <= half_width || continue
+            abs(x) <= half_width + tol || continue
             push!(c1, x)
             push!(c2, y)
         end
@@ -227,12 +253,15 @@ end
 
 function parseRectangleSize(patch::XMLElement, c0::Float64, size_name::String, c1_name::String)
     size_element = find_element(patch, size_name)
-    if !isnothing(size_element)
-        return parse(Float64, content(size_element))
+    size = if !isnothing(size_element)
+        parse(Float64, content(size_element))
+    else
+        c1 = find_element(patch, c1_name)
+        @assert !isnothing(c1) "Rectangle patch must have either a $(size_name) or $(c1_name) element."
+        parse(Float64, content(c1)) - c0
     end
-    c1 = find_element(patch, c1_name)
-    @assert !isnothing(c1) "Rectangle patch must have either a $(size_name) or $(c1_name) element."
-    return parse(Float64, content(c1)) - c0
+    @assert size > 0 "Rectangle patch ID $(attribute(patch, "ID")) must have positive $(size_name). Got $(size) (if using $(c1_name), it must be greater than the corresponding corner coordinate)."
+    return size
 end
 
 abstract type PatchCarveout end
@@ -320,8 +349,8 @@ function carveOut!(df::DataFrame, carveout::DiscCarveout)
 end
 
 function carveOut!(df::DataFrame, carveout::AnnulusCarveout)
-    keep_ind = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .> carveout.outer_radius .||
-               sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .< carveout.inner_radius
+    d = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2)
+    keep_ind = d .> carveout.outer_radius .|| d .< carveout.inner_radius
     deleteat!(df, findall(.!keep_ind))
 end
 
@@ -408,7 +437,8 @@ function placeAnnulus!(df::DataFrame, inner_radius::Float64, outer_radius::Float
     else
         c1, c2 = hexagonalGridPoints(spacing, outer_radius, outer_radius)
         r = sqrt.(c1 .^ 2 .+ c2 .^ 2)
-        keep_ind = inner_radius .<= r .<= outer_radius
+        tol = boundary_tolerance * spacing
+        keep_ind = inner_radius - tol .<= r .<= outer_radius + tol
         cell_df = annulusCoordinates(c1[keep_ind], c2[keep_ind], x0, y0, z0, normal_vector)
         filterCells!(cell_df, restrict_to_domain, domain_dict, carveouts)
         warnIfEmpty(cell_df, patch, cell_type)
