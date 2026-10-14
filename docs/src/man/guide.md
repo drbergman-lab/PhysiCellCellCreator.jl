@@ -100,6 +100,44 @@ If omitted, it is assumed to be "true".
 Possible values are "true", "false", "0", and "1".
 Add the following to the patch element to set: `<restrict_to_domain>false</restrict_to_domain>`.
 
+### Hexagonal grid
+Each `<patch>` element can carry a `placement` attribute saying how cells are placed in it.
+The default, `placement="random"`, places `number` cells uniformly at random as described above.
+Setting `placement="hexagonal"` instead fills the patch with a hexagonal grid (lattice) of cells; the attribute tells you what to look for inside the patch: a `spacing` element rather than a `number` element.
+The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a cell placed at that center.
+Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
+For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` element.
+
+The distance between neighboring cell centers is set by the optional `spacing` element:
+```xml
+<patch_collection type="disc">
+  <patch ID="1" placement="hexagonal">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <radius>50.0</radius>
+      <spacing>12.0</spacing>
+  </patch>
+</patch_collection>
+```
+
+If `spacing` is omitted, the spacing is computed from the cell radius passed to `generateICCell` via the `cell_radius` keyword argument as `spacing = spacing_factor * 2 * cell_radius`.
+This lets a calling package that knows the cell radius (e.g., from the PhysiCell configuration file) fill patches without hard-coding the spacing in the XML.
+`cell_radius` can be a single number applied to all cell types or a `Dict` mapping cell type names to radii.
+The `spacing_factor` keyword argument defaults to `0.95`, matching the slightly compressed packing used in PhysiCell's sample projects; use `1.0` to place cells tangent to their neighbors.
+```julia
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4)
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=Dict("default" => 8.4, "fibroblast" => 6.2))
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4, spacing_factor=1.0)
+```
+An error is thrown if a hexagonal grid patch has no `spacing` and no radius is available for its cell type.
+
+Notes:
+- A `placement="hexagonal"` patch cannot have a `number` element as both determine how many cells are placed. The number of cells in a hexagonal grid is determined by the patch size and the spacing.
+- A random placement patch cannot have a `spacing` element.
+- `max_fails` is ignored for hexagonal grids since placement is deterministic. A warning is issued if no lattice points survive the patch, domain, and carveout filters.
+- Lattice points exactly on the patch boundary are kept. To avoid floating-point rounding dropping them, points within `boundary_tolerance * spacing` outside the boundary are also kept; `boundary_tolerance` is a keyword argument of `generateICCell` defaulting to `1e-10`.
+
 ### Carveouts
 Every patch type can also include a `<carveout_patches>` element, which specifies regions where cells should not be placed.
 The currently supported carveouts are `disc`, `annulus`, and `rectangle`.
@@ -130,7 +168,7 @@ To add a carveout to a patch, add a `<carveout_patches>` element to the patch, t
 ```
 
 ### Max fails
-When attempting to place cells, points taken uniformly randomly from the entire patch are selected and then pared down based on the domain and careveouts.
+When attempting to place cells, points taken uniformly randomly from the entire patch are selected and then pared down based on the domain and carveouts.
 This can lead to a situation where many samplings must be taken to finally achieve `number` of cells in each patch.
 In the worst case scenario, a patch has no area and cannot support any cells.
 To prevent the program from running indefinitely, a `max_fails` parameter controls how many samples are taken before giving up.
@@ -163,6 +201,13 @@ A full example XML is shown below.
             </patch>
           </patch_collection>
         </carveout_patches>
+      </patch>
+      <patch ID="2" placement="hexagonal">
+        <x0>200.0</x0>
+        <y0>200.0</y0>
+        <z0>0.0</z0>
+        <radius>40.0</radius>
+        <spacing>12.0</spacing>
       </patch>
     </patch_collection>
     <patch_collection type="annulus">
