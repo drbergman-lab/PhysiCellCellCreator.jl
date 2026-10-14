@@ -444,6 +444,7 @@ function generatePatch!(::Type{RectanglePatch}, df::DataFrame, patch::XMLElement
 end
 
 function generatePatch!(::Type{EverywherePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
+    # everywhere patches are 2D: cells are placed at z = 0 regardless of the domain z bounds (both random and hexagonal placement)
     x0 = Float64(domain_dict["x_min"])
     y0 = Float64(domain_dict["y_min"])
     width = Float64(domain_dict["x_max"] - domain_dict["x_min"])

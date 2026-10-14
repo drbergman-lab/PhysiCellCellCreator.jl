@@ -102,7 +102,7 @@ Add the following to the patch element to set: `<restrict_to_domain>false</restr
 
 ### Hexagonal grid
 Instead of placing `number` cells uniformly at random, any patch type can be filled with a hexagonal grid (lattice) of cells by setting `<hexagonal_grid>true</hexagonal_grid>`.
-The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the center of the domain for `everywhere`) with a cell placed at that center.
+The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a cell placed at that center.
 Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
 For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` element.
 
