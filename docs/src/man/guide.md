@@ -120,12 +120,14 @@ The distance between neighboring cell centers is set by the optional `spacing` e
 </patch_collection>
 ```
 
-If `spacing` is omitted, the spacing defaults to twice the cell radius passed to `generateICCell` via the `cell_radius` keyword argument, i.e., cells are placed tangent to their neighbors.
+If `spacing` is omitted, the spacing is computed from the cell radius passed to `generateICCell` via the `cell_radius` keyword argument as `spacing = spacing_factor * 2 * cell_radius`.
 This lets a calling package that knows the cell radius (e.g., from the PhysiCell configuration file) fill patches without hard-coding the spacing in the XML.
-`cell_radius` can be a single number applied to all cell types or a `Dict` mapping cell type names to radii:
+`cell_radius` can be a single number applied to all cell types or a `Dict` mapping cell type names to radii.
+The `spacing_factor` keyword argument defaults to `0.95`, matching the slightly compressed packing used in PhysiCell's sample projects; use `1.0` to place cells tangent to their neighbors.
 ```julia
 generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4)
 generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=Dict("default" => 8.4, "fibroblast" => 6.2))
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4, spacing_factor=1.0)
 ```
 An error is thrown if a hexagonal grid patch has no `spacing` and no radius is available for its cell type.
 

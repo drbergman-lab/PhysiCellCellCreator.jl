@@ -13,12 +13,22 @@ Accepted types for the `cell_radius` keyword argument of [`generateICCell`](@ref
 """
 const CellRadius = Union{Nothing,Real,AbstractDict{<:AbstractString,<:Real}}
 
+"""
+    HexagonalDefaults
+
+Caller-supplied defaults used by hexagonal grid patches that omit a `spacing` element: the cell radius (per cell type or global) and the spacing factor, giving `spacing = spacing_factor * 2 * cell_radius`.
+"""
+struct HexagonalDefaults
+    cell_radius::CellRadius
+    spacing_factor::Float64
+end
+
 resolveCellRadius(::Nothing, ::String) = nothing
 resolveCellRadius(cell_radius::Real, ::String) = Float64(cell_radius)
 resolveCellRadius(cell_radius::AbstractDict{<:AbstractString,<:Real}, cell_type::String) = haskey(cell_radius, cell_type) ? Float64(cell_radius[cell_type]) : nothing
 
 """
-    generateICCell(path_to_ic_cell_xml, domain_dict; output=nothing, cell_radius=nothing)
+    generateICCell(path_to_ic_cell_xml, domain_dict; output=nothing, cell_radius=nothing, spacing_factor=0.95)
 
 Generate initial cell positions from the IC cell XML file at `path_to_ic_cell_xml`.
 
@@ -26,17 +36,21 @@ Generate initial cell positions from the IC cell XML file at `path_to_ic_cell_xm
 
 # Keyword arguments
 - `output`: if `nothing` (default), return a `DataFrame` with columns `x`, `y`, `z`, and `type`; otherwise, write a CSV file to this path.
-- `cell_radius`: the radius of the cells being placed, used to compute the default spacing (`2 * cell_radius`) for patches that use a hexagonal grid but do not specify a `spacing` element.
+- `cell_radius`: the radius of the cells being placed, used to compute the default spacing for patches that use a hexagonal grid but do not specify a `spacing` element.
   Either a single `Real` applied to every cell type or a `Dict` mapping cell type names (the `name` attribute of `cell_patches`) to radii.
   Only required when a hexagonal grid patch omits `spacing`.
+- `spacing_factor`: multiplies the cell diameter to get the default spacing, i.e., `spacing = spacing_factor * 2 * cell_radius`.
+  The default of `0.95` matches the slightly compressed packing used in PhysiCell's sample projects; `1.0` places cells tangent to their neighbors.
 """
-function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}; output::Union{Nothing,AbstractString}=nothing, cell_radius::CellRadius=nothing)
+function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}; output::Union{Nothing,AbstractString}=nothing, cell_radius::CellRadius=nothing, spacing_factor::Real=0.95)
+    @assert spacing_factor > 0 "spacing_factor must be positive. Got $(spacing_factor)."
+    hex_defaults = HexagonalDefaults(cell_radius, Float64(spacing_factor))
     sink = isnothing(output) ? DataFrame : CSV.write(output)
     xml_doc = parse_file(path_to_ic_cell_xml)
     ic_cells = root(xml_doc)
     df = DataFrame(x=Float64[], y=Float64[], z=Float64[], type=String[])
     for cell_patches in child_elements(ic_cells)
-        generateCellPatches!(df, cell_patches, domain_dict, cell_radius)
+        generateCellPatches!(df, cell_patches, domain_dict, hex_defaults)
     end
     free(xml_doc)
 
@@ -45,17 +59,17 @@ end
 
 @deprecate generateICCell(path_to_ic_cell_xml::AbstractString, path_to_output::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}) generateICCell(path_to_ic_cell_xml, domain_dict; output=path_to_output)
 
-function generateCellPatches!(df::DataFrame, cell_patches::XMLElement, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generateCellPatches!(df::DataFrame, cell_patches::XMLElement, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     cell_type = attribute(cell_patches, "name")
     for patch_collection in child_elements(cell_patches)
-        generatePatchCollection!(df, patch_collection, cell_type, domain_dict, cell_radius)
+        generatePatchCollection!(df, patch_collection, cell_type, domain_dict, hex_defaults)
     end
 end
 
-function generatePatchCollection!(df::DataFrame, patch_collection::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generatePatchCollection!(df::DataFrame, patch_collection::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     patch_type = attribute(patch_collection, "type")
     for patch in child_elements(patch_collection)
-        generatePatch!(patchType(patch_type), df, patch, cell_type, domain_dict, cell_radius)
+        generatePatch!(patchType(patch_type), df, patch, cell_type, domain_dict, hex_defaults)
     end
 end
 
@@ -123,14 +137,14 @@ function parseNumber(patch::XMLElement, cell_type::String)
 end
 
 """
-    parseHexagonalGrid(patch, cell_type, cell_radius)
+    parseHexagonalGrid(patch, cell_type, hex_defaults)
 
 Return `nothing` if the patch does not request a hexagonal grid; otherwise, return the lattice spacing (distance between neighboring cell centers).
 
-The spacing comes from the patch's `spacing` element if present, and otherwise from `2 * cell_radius`.
+The spacing comes from the patch's `spacing` element if present, and otherwise from `hex_defaults.spacing_factor * 2 * cell_radius`.
 A patch cannot specify both `number` and `hexagonal_grid` since both determine how many cells are placed.
 """
-function parseHexagonalGrid(patch::XMLElement, cell_type::String, cell_radius::CellRadius)
+function parseHexagonalGrid(patch::XMLElement, cell_type::String, hex_defaults::HexagonalDefaults)
     patch_descriptor = "$(cell_type) with patch ID $(attribute(patch, "ID"))"
     is_hexagonal = parseBoolElement(patch, "hexagonal_grid", false, cell_type)
     spacing_element = find_element(patch, "spacing")
@@ -142,9 +156,9 @@ function parseHexagonalGrid(patch::XMLElement, cell_type::String, cell_radius::C
     if !isnothing(spacing_element)
         spacing = parse(Float64, content(spacing_element))
     else
-        radius = resolveCellRadius(cell_radius, cell_type)
+        radius = resolveCellRadius(hex_defaults.cell_radius, cell_type)
         @assert !isnothing(radius) "hexagonal_grid is true for $(patch_descriptor) but no spacing element is set and no cell_radius was passed to generateICCell for this cell type."
-        spacing = 2 * radius
+        spacing = hex_defaults.spacing_factor * 2 * radius
     end
     @assert spacing > 0 "spacing for $(patch_descriptor) must be positive. Got $(spacing)."
     return spacing
@@ -353,12 +367,12 @@ function annulusCoordinates(c1::Vector{Float64}, c2::Vector{Float64}, x0::Float6
     return _df
 end
 
-function placeAnnulus!(df::DataFrame, inner_radius::Float64, outer_radius::Float64, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function placeAnnulus!(df::DataFrame, inner_radius::Float64, outer_radius::Float64, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     x0, y0, z0 = parseCenter(patch)
     normal_vector = parseNormal(patch, cell_type)
     restrict_to_domain = parseRestrictToDomain(patch, cell_type)
     carveouts = parseCarveouts(patch)
-    spacing = parseHexagonalGrid(patch, cell_type, cell_radius)
+    spacing = parseHexagonalGrid(patch, cell_type, hex_defaults)
 
     if isnothing(spacing)
         number = parseNumber(patch, cell_type)
@@ -387,26 +401,26 @@ function warnIfEmpty(cell_df::DataFrame, patch::XMLElement, cell_type::String)
     end
 end
 
-function generatePatch!(::Type{DiscPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generatePatch!(::Type{DiscPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     radius = parse(Float64, find_element(patch, "radius") |> content)
-    placeAnnulus!(df, 0.0, radius, patch, cell_type, domain_dict, cell_radius)
+    placeAnnulus!(df, 0.0, radius, patch, cell_type, domain_dict, hex_defaults)
 end
 
-function generatePatch!(::Type{AnnulusPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generatePatch!(::Type{AnnulusPatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     inner_radius = parse(Float64, find_element(patch, "inner_radius") |> content)
     outer_radius = parse(Float64, find_element(patch, "outer_radius") |> content)
     @assert inner_radius <= outer_radius "Inner radius must be less than or equal to outer radius. Got inner_radius=$(inner_radius) > outer_radius=$(outer_radius)."
-    placeAnnulus!(df, inner_radius, outer_radius, patch, cell_type, domain_dict, cell_radius)
+    placeAnnulus!(df, inner_radius, outer_radius, patch, cell_type, domain_dict, hex_defaults)
 end
 
 """
-    placeBox!(df, x0, y0, z0, width, height, restrict_to_domain, patch, cell_type, domain_dict, cell_radius)
+    placeBox!(df, x0, y0, z0, width, height, restrict_to_domain, patch, cell_type, domain_dict, hex_defaults)
 
 Place cells in the axis-aligned box `[x0, x0 + width] x [y0, y0 + height]` at height `z0`, either uniformly at random or on a hexagonal grid centered in the box.
 """
-function placeBox!(df::DataFrame, x0::Float64, y0::Float64, z0::Float64, width::Float64, height::Float64, restrict_to_domain::Bool, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function placeBox!(df::DataFrame, x0::Float64, y0::Float64, z0::Float64, width::Float64, height::Float64, restrict_to_domain::Bool, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     carveouts = parseCarveouts(patch)
-    spacing = parseHexagonalGrid(patch, cell_type, cell_radius)
+    spacing = parseHexagonalGrid(patch, cell_type, hex_defaults)
 
     if isnothing(spacing)
         number = parseNumber(patch, cell_type)
@@ -423,18 +437,18 @@ function placeBox!(df::DataFrame, x0::Float64, y0::Float64, z0::Float64, width::
     append!(df, cell_df)
 end
 
-function generatePatch!(::Type{RectanglePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generatePatch!(::Type{RectanglePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     x0, y0, z0, width, height = parseRectangleParameters(patch)
     restrict_to_domain = parseRestrictToDomain(patch, cell_type)
-    placeBox!(df, x0, y0, z0, width, height, restrict_to_domain, patch, cell_type, domain_dict, cell_radius)
+    placeBox!(df, x0, y0, z0, width, height, restrict_to_domain, patch, cell_type, domain_dict, hex_defaults)
 end
 
-function generatePatch!(::Type{EverywherePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, cell_radius::CellRadius)
+function generatePatch!(::Type{EverywherePatch}, df::DataFrame, patch::XMLElement, cell_type::String, domain_dict::Dict{<:AbstractString,<:Real}, hex_defaults::HexagonalDefaults)
     x0 = Float64(domain_dict["x_min"])
     y0 = Float64(domain_dict["y_min"])
     width = Float64(domain_dict["x_max"] - domain_dict["x_min"])
     height = Float64(domain_dict["y_max"] - domain_dict["y_min"])
-    placeBox!(df, x0, y0, 0.0, width, height, false, patch, cell_type, domain_dict, cell_radius)
+    placeBox!(df, x0, y0, 0.0, width, height, false, patch, cell_type, domain_dict, hex_defaults)
 end
 
 """

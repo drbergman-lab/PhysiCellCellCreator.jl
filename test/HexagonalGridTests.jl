@@ -122,15 +122,22 @@ end
 @testset "spacing from cell_radius" begin
     writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true"])
     @test_throws AssertionError generateICCell(hex_xml, hex_domain) # no spacing and no cell_radius
+    # default spacing_factor is 0.95, so spacing = 0.95 * 2 * cell_radius
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0)
-    @test all(isapprox.(nearestNeighborDistances(df), 12.0; atol=1e-8))
+    @test all(isapprox.(nearestNeighborDistances(df), 0.95 * 12.0; atol=1e-8))
     df = generateICCell(hex_xml, hex_domain; cell_radius=Dict("default" => 4))
-    @test all(isapprox.(nearestNeighborDistances(df), 8.0; atol=1e-8))
+    @test all(isapprox.(nearestNeighborDistances(df), 0.95 * 8.0; atol=1e-8))
     @test_throws AssertionError generateICCell(hex_xml, hex_domain; cell_radius=Dict("other_cell_type" => 4.0))
+    # explicit spacing_factor
+    df = generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=1.0)
+    @test all(isapprox.(nearestNeighborDistances(df), 12.0; atol=1e-8))
+    df = generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=0.5)
+    @test all(isapprox.(nearestNeighborDistances(df), 6.0; atol=1e-8))
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=0.0)
 
     # explicit spacing takes precedence over cell_radius
     writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true", "spacing" => "10.0"])
-    df = generateICCell(hex_xml, hex_domain; cell_radius=6.0)
+    df = generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=1.0)
     @test all(isapprox.(nearestNeighborDistances(df), 10.0; atol=1e-8))
 
     # cell_radius is ignored by random placement
@@ -173,9 +180,14 @@ end
     createICCellXMLTemplate(template_folder)
     df = generateICCell(joinpath(template_folder, "cells.xml"), hex_domain)
     # the template's hexagonal disc is centered at (200, 200) with radius 40 and spacing 12
+    # (random patches in the template may also place cells in this region, so check the lattice points directly)
+    hasCellAt(x, y) = any(isapprox.(df.x, x; atol=1e-8) .&& isapprox.(df.y, y; atol=1e-8))
+    @test hasCellAt(200.0, 200.0)
+    @test hasCellAt(212.0, 200.0)
+    @test hasCellAt(206.0, 200.0 + 12.0 * sqrt(3) / 2)
+    @test !hasCellAt(236.0, 200.0 + 2 * 12.0 * sqrt(3) / 2) # outside the disc (radius ~ 42.3 > 40)
     hex_ind = sqrt.((df.x .- 200.0) .^ 2 .+ (df.y .- 200.0) .^ 2) .<= 40.0 + 1e-8
-    @test count(hex_ind) > 0
-    @test all(isapprox.(nearestNeighborDistances(df[hex_ind, :]), 12.0; atol=1e-8))
+    @test count(hex_ind) >= 37 # 1 + 6 + 12 + 18 lattice points within 3 spacings of the center
 end
 
 rm(hex_folder; recursive=true)
