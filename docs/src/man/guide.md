@@ -100,6 +100,40 @@ If omitted, it is assumed to be "true".
 Possible values are "true", "false", "0", and "1".
 Add the following to the patch element to set: `<restrict_to_domain>false</restrict_to_domain>`.
 
+### Hexagonal grid
+Instead of placing `number` cells uniformly at random, any patch type can be filled with a hexagonal grid (lattice) of cells by setting `<hexagonal_grid>true</hexagonal_grid>`.
+The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the center of the domain for `everywhere`) with a cell placed at that center.
+Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
+For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` element.
+
+The distance between neighboring cell centers is set by the optional `spacing` element:
+```xml
+<patch_collection type="disc">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <radius>50.0</radius>
+      <hexagonal_grid>true</hexagonal_grid>
+      <spacing>12.0</spacing>
+  </patch>
+</patch_collection>
+```
+
+If `spacing` is omitted, the spacing defaults to twice the cell radius passed to `generateICCell` via the `cell_radius` keyword argument, i.e., cells are placed tangent to their neighbors.
+This lets a calling package that knows the cell radius (e.g., from the PhysiCell configuration file) fill patches without hard-coding the spacing in the XML.
+`cell_radius` can be a single number applied to all cell types or a `Dict` mapping cell type names to radii:
+```julia
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4)
+generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=Dict("default" => 8.4, "fibroblast" => 6.2))
+```
+An error is thrown if a hexagonal grid patch has no `spacing` and no radius is available for its cell type.
+
+Notes:
+- `number` and `hexagonal_grid` cannot both be set in the same patch as both determine how many cells are placed. The number of cells in a hexagonal grid is determined by the patch size and the spacing.
+- `spacing` is only allowed when `hexagonal_grid` is true.
+- `max_fails` is ignored for hexagonal grids since placement is deterministic. A warning is issued if no lattice points survive the patch, domain, and carveout filters.
+
 ### Carveouts
 Every patch type can also include a `<carveout_patches>` element, which specifies regions where cells should not be placed.
 The currently supported carveouts are `disc`, `annulus`, and `rectangle`.
@@ -130,7 +164,7 @@ To add a carveout to a patch, add a `<carveout_patches>` element to the patch, t
 ```
 
 ### Max fails
-When attempting to place cells, points taken uniformly randomly from the entire patch are selected and then pared down based on the domain and careveouts.
+When attempting to place cells, points taken uniformly randomly from the entire patch are selected and then pared down based on the domain and carveouts.
 This can lead to a situation where many samplings must be taken to finally achieve `number` of cells in each patch.
 In the worst case scenario, a patch has no area and cannot support any cells.
 To prevent the program from running indefinitely, a `max_fails` parameter controls how many samples are taken before giving up.
@@ -163,6 +197,14 @@ A full example XML is shown below.
             </patch>
           </patch_collection>
         </carveout_patches>
+      </patch>
+      <patch ID="2">
+        <x0>200.0</x0>
+        <y0>200.0</y0>
+        <z0>0.0</z0>
+        <radius>40.0</radius>
+        <hexagonal_grid>true</hexagonal_grid>
+        <spacing>12.0</spacing>
       </patch>
     </patch_collection>
     <patch_collection type="annulus">
