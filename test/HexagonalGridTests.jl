@@ -193,10 +193,17 @@ end
     df = generateICCell(hex_xml, hex_domain)
     @test any(isapprox.(df.x, 0.15; atol=1e-12) .&& isapprox.(df.y, 0.0; atol=1e-12))
     @test any(isapprox.(df.x, -0.15; atol=1e-12) .&& isapprox.(df.y, 0.0; atol=1e-12))
+    # with boundary_tolerance = 0 the strict comparison drops the rounded-out edge point
+    df = generateICCell(hex_xml, hex_domain; boundary_tolerance=0.0)
+    @test !any(isapprox.(df.x, 0.15; atol=1e-12) .&& isapprox.(df.y, 0.0; atol=1e-12))
     # a disc whose radius lands exactly on a lattice ring keeps that ring
     writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "0.3", "spacing" => "0.1"])
     df = generateICCell(hex_xml, hex_domain)
     @test count(isapprox.(sqrt.(df.x .^ 2 .+ df.y .^ 2), 0.3; atol=1e-9)) == 6
+    # a large tolerance pulls in the next ring; a negative one errors
+    df = generateICCell(hex_xml, hex_domain; boundary_tolerance=0.5)
+    @test count(sqrt.(df.x .^ 2 .+ df.y .^ 2) .> 0.3 + 1e-9) > 0
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain; boundary_tolerance=-1e-3)
 end
 
 @testset "flipped rectangle errors in both modes" begin

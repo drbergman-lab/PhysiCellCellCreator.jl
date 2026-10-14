@@ -16,11 +16,12 @@ const CellRadius = Union{Nothing,Real,AbstractDict}
 """
     HexagonalDefaults
 
-Caller-supplied defaults used by hexagonal grid patches that omit a `spacing` element: the cell radius (per cell type or global) and the spacing factor, giving `spacing = spacing_factor * 2 * cell_radius`.
+Caller-supplied settings for hexagonal grid patches: the cell radius (per cell type or global) and the spacing factor, giving the default `spacing = spacing_factor * 2 * cell_radius` for patches that omit a `spacing` element, and the boundary tolerance (as a fraction of the spacing) used when deciding whether a lattice point lies on the boundary of a patch.
 """
 struct HexagonalDefaults
     cell_radius::CellRadius
     spacing_factor::Float64
+    boundary_tolerance::Float64
 end
 
 resolveCellRadius(::Nothing, ::String) = nothing
@@ -33,7 +34,7 @@ function resolveCellRadius(cell_radius::AbstractDict, cell_type::String)
 end
 
 """
-    generateICCell(path_to_ic_cell_xml, domain_dict; output=nothing, cell_radius=nothing, spacing_factor=0.95)
+    generateICCell(path_to_ic_cell_xml, domain_dict; output=nothing, cell_radius=nothing, spacing_factor=0.95, boundary_tolerance=1e-10)
 
 Generate initial cell positions from the IC cell XML file at `path_to_ic_cell_xml`.
 
@@ -46,10 +47,13 @@ Generate initial cell positions from the IC cell XML file at `path_to_ic_cell_xm
   Only required when a hexagonal grid patch omits `spacing`.
 - `spacing_factor`: multiplies the cell diameter to get the default spacing, i.e., `spacing = spacing_factor * 2 * cell_radius`.
   The default of `0.95` matches the slightly compressed packing used in PhysiCell's sample projects; `1.0` places cells tangent to their neighbors.
+- `boundary_tolerance`: for hexagonal grids, lattice points within `boundary_tolerance * spacing` outside the patch boundary are still kept.
+  The default of `1e-10` only absorbs floating-point rounding so that points exactly on the boundary are not dropped; set it to `0` for a strict comparison.
 """
-function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}; output::Union{Nothing,AbstractString}=nothing, cell_radius::CellRadius=nothing, spacing_factor::Real=0.95)
+function generateICCell(path_to_ic_cell_xml::AbstractString, domain_dict::Dict{<:AbstractString,<:Real}; output::Union{Nothing,AbstractString}=nothing, cell_radius::CellRadius=nothing, spacing_factor::Real=0.95, boundary_tolerance::Real=1e-10)
     @assert spacing_factor > 0 "spacing_factor must be positive. Got $(spacing_factor)."
-    hex_defaults = HexagonalDefaults(cell_radius, Float64(spacing_factor))
+    @assert boundary_tolerance >= 0 "boundary_tolerance must be non-negative. Got $(boundary_tolerance)."
+    hex_defaults = HexagonalDefaults(cell_radius, Float64(spacing_factor), Float64(boundary_tolerance))
     sink = isnothing(output) ? DataFrame : CSV.write(output)
     xml_doc = parse_file(path_to_ic_cell_xml)
     ic_cells = root(xml_doc)
@@ -194,22 +198,15 @@ Upper bound on the number of lattice points a single hexagonal grid patch may ge
 const max_hexagonal_grid_points = 10_000_000
 
 """
-    boundary_tolerance
-
-Relative tolerance (as a fraction of the spacing) used when deciding whether a lattice point lies on the boundary of a patch.
-"""
-const boundary_tolerance = 1e-10
-
-"""
-    hexagonalGridPoints(spacing, half_width, half_height)
+    hexagonalGridPoints(spacing, half_width, half_height, boundary_tolerance)
 
 Return the `(c1, c2)` coordinates of a hexagonal lattice with the given `spacing` covering `[-half_width, half_width] x [-half_height, half_height]`.
 
 The lattice has a point at the origin, rows parallel to the first axis separated by `spacing * sqrt(3) / 2`, and alternating rows offset by `spacing / 2`.
-Points on the boundary are kept, with a small tolerance so floating-point rounding does not drop them.
+Points within `boundary_tolerance * spacing` outside the region are still kept so floating-point rounding does not drop boundary points.
 An `ArgumentError` is thrown if the lattice would exceed `max_hexagonal_grid_points` points, which almost certainly indicates a spacing typo.
 """
-function hexagonalGridPoints(spacing::Float64, half_width::Float64, half_height::Float64)
+function hexagonalGridPoints(spacing::Float64, half_width::Float64, half_height::Float64, boundary_tolerance::Float64)
     row_height = spacing * sqrt(3) / 2
     n_rows = ceil(Int, half_height / row_height)
     n_cols = ceil(Int, half_width / spacing) + 1
@@ -435,9 +432,9 @@ function placeAnnulus!(df::DataFrame, inner_radius::Float64, outer_radius::Float
         end
         cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
     else
-        c1, c2 = hexagonalGridPoints(spacing, outer_radius, outer_radius)
+        c1, c2 = hexagonalGridPoints(spacing, outer_radius, outer_radius, hex_defaults.boundary_tolerance)
         r = sqrt.(c1 .^ 2 .+ c2 .^ 2)
-        tol = boundary_tolerance * spacing
+        tol = hex_defaults.boundary_tolerance * spacing
         keep_ind = inner_radius - tol .<= r .<= outer_radius + tol
         cell_df = annulusCoordinates(c1[keep_ind], c2[keep_ind], x0, y0, z0, normal_vector)
         filterCells!(cell_df, restrict_to_domain, domain_dict, carveouts)
@@ -480,7 +477,7 @@ function placeBox!(df::DataFrame, x0::Float64, y0::Float64, z0::Float64, width::
         cell_coords_fn(n::Int) = DataFrame(x=x0 .+ width * rand(n), y=y0 .+ height * rand(n), z=fill(z0, n))
         cell_df = createCellsDataFrame(number, cell_coords_fn, restrict_to_domain, domain_dict, carveouts, max_fails)
     else
-        c1, c2 = hexagonalGridPoints(spacing, width / 2, height / 2)
+        c1, c2 = hexagonalGridPoints(spacing, width / 2, height / 2, hex_defaults.boundary_tolerance)
         cell_df = DataFrame(x=c1 .+ (x0 + width / 2), y=c2 .+ (y0 + height / 2), z=fill(z0, length(c1)))
         filterCells!(cell_df, restrict_to_domain, domain_dict, carveouts)
         warnIfEmpty(cell_df, patch, cell_type)

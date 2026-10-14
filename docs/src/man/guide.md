@@ -136,6 +136,7 @@ Notes:
 - A `placement="hexagonal"` patch cannot have a `number` element as both determine how many cells are placed. The number of cells in a hexagonal grid is determined by the patch size and the spacing.
 - A random placement patch cannot have a `spacing` element.
 - `max_fails` is ignored for hexagonal grids since placement is deterministic. A warning is issued if no lattice points survive the patch, domain, and carveout filters.
+- Lattice points exactly on the patch boundary are kept. To avoid floating-point rounding dropping them, points within `boundary_tolerance * spacing` outside the boundary are also kept; `boundary_tolerance` is a keyword argument of `generateICCell` defaulting to `1e-10`.
 
 ### Carveouts
 Every patch type can also include a `<carveout_patches>` element, which specifies regions where cells should not be placed.
