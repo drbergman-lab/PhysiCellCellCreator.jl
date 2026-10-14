@@ -314,32 +314,37 @@ function createCarveoutPatch(::Type{RectangleCarveout}, patch::XMLElement)
     return RectangleCarveout(x0, y0, z0, width, height)
 end
 
-function carveOut(df::DataFrame, carveout::DiscCarveout)
+function carveOut!(df::DataFrame, carveout::DiscCarveout)
     keep_ind = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .> carveout.radius
-    return df[keep_ind, :]
+    deleteat!(df, findall(.!keep_ind))
 end
 
-function carveOut(df::DataFrame, carveout::AnnulusCarveout)
+function carveOut!(df::DataFrame, carveout::AnnulusCarveout)
     keep_ind = sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .> carveout.outer_radius .||
                sqrt.((df.x .- carveout.x0) .^ 2 + (df.y .- carveout.y0) .^ 2 + (df.z .- carveout.z0) .^ 2) .< carveout.inner_radius
-    return df[keep_ind, :]
+    deleteat!(df, findall(.!keep_ind))
 end
 
-function carveOut(df::DataFrame, carveout::RectangleCarveout)
+function carveOut!(df::DataFrame, carveout::RectangleCarveout)
     keep_ind = (df.x .< carveout.x0) .|| (df.x .> carveout.x0 + carveout.width) .||
                (df.y .< carveout.y0) .|| (df.y .> carveout.y0 + carveout.height)
-    return df[keep_ind, :]
+    deleteat!(df, findall(.!keep_ind))
 end
 
-function filterCells(df::DataFrame, restrict_to_domain::Bool, domain_dict::Dict{<:AbstractString,<:Real}, carveouts::Vector{PatchCarveout})
+"""
+    filterCells!(df, restrict_to_domain, domain_dict, carveouts)
+
+Remove in place the rows of `df` that fall outside the domain (if `restrict_to_domain`) or inside any of the `carveouts`.
+"""
+function filterCells!(df::DataFrame, restrict_to_domain::Bool, domain_dict::Dict{<:AbstractString,<:Real}, carveouts::Vector{PatchCarveout})
     if restrict_to_domain
         keep_ind = df.x .>= domain_dict["x_min"] .&& df.x .<= domain_dict["x_max"] .&&
                    df.y .>= domain_dict["y_min"] .&& df.y .<= domain_dict["y_max"] .&&
                    df.z .>= domain_dict["z_min"] .&& df.z .<= domain_dict["z_max"]
-        df = df[keep_ind, :]
+        deleteat!(df, findall(.!keep_ind))
     end
     for carveout in carveouts
-        df = carveOut(df, carveout)
+        carveOut!(df, carveout)
     end
     return df
 end
@@ -350,7 +355,7 @@ function createCellsDataFrame(number::Int, cell_coords_fn::Function, restrict_to
     fails_remaining = max_fails
     while total_placed < number
         df_new = cell_coords_fn(number - total_placed)
-        df_new = filterCells(df_new, restrict_to_domain, domain_dict, carveouts)
+        filterCells!(df_new, restrict_to_domain, domain_dict, carveouts)
         append!(df, df_new)
         total_placed += size(df_new, 1)
         if size(df_new, 1) == 0
@@ -405,7 +410,7 @@ function placeAnnulus!(df::DataFrame, inner_radius::Float64, outer_radius::Float
         r = sqrt.(c1 .^ 2 .+ c2 .^ 2)
         keep_ind = inner_radius .<= r .<= outer_radius
         cell_df = annulusCoordinates(c1[keep_ind], c2[keep_ind], x0, y0, z0, normal_vector)
-        cell_df = filterCells(cell_df, restrict_to_domain, domain_dict, carveouts)
+        filterCells!(cell_df, restrict_to_domain, domain_dict, carveouts)
         warnIfEmpty(cell_df, patch, cell_type)
     end
     cell_df[!, :type] .= cell_type
@@ -447,7 +452,7 @@ function placeBox!(df::DataFrame, x0::Float64, y0::Float64, z0::Float64, width::
     else
         c1, c2 = hexagonalGridPoints(spacing, width / 2, height / 2)
         cell_df = DataFrame(x=c1 .+ (x0 + width / 2), y=c2 .+ (y0 + height / 2), z=fill(z0, length(c1)))
-        cell_df = filterCells(cell_df, restrict_to_domain, domain_dict, carveouts)
+        filterCells!(cell_df, restrict_to_domain, domain_dict, carveouts)
         warnIfEmpty(cell_df, patch, cell_type)
     end
     cell_df[!, :type] .= cell_type
