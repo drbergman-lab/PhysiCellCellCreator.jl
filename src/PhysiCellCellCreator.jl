@@ -4,7 +4,7 @@ using LightXML, CSV, DataFrames, LinearAlgebra, Compat
 
 export generateICCell, createICCellXMLTemplate
 
-@compat public supportedPatchTypes, supportedPatchTextElements, supportedCarveoutTypes, supportedCarveoutTextElements
+@compat public supportedPatchTypes, supportedPatchTextElements, supportedPlacements, supportedCarveoutTypes, supportedCarveoutTextElements
 
 """
     CellRadius
@@ -80,12 +80,29 @@ struct EverywherePatch end
 
 supportedPatchTypes() = ["disc", "annulus", "rectangle", "everywhere"]
 
-supportedPatchTextElements(::Type{DiscPatch}) = ["x0", "y0", "z0", "radius", "number", "hexagonal_grid", "spacing", "normal", "max_fails", "restrict_to_domain"]
-supportedPatchTextElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_radius", "outer_radius", "number", "hexagonal_grid", "spacing", "normal", "max_fails", "restrict_to_domain"]
-supportedPatchTextElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height", "number", "hexagonal_grid", "spacing", "normal", "max_fails", "restrict_to_domain"]
-supportedPatchTextElements(::Type{EverywherePatch}) = ["number", "hexagonal_grid", "spacing", "normal", "max_fails"]
+supportedPatchTextElements(::Type{DiscPatch}) = ["x0", "y0", "z0", "radius", "number", "spacing", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_radius", "outer_radius", "number", "spacing", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height", "number", "spacing", "normal", "max_fails", "restrict_to_domain"]
+supportedPatchTextElements(::Type{EverywherePatch}) = ["number", "spacing", "normal", "max_fails"]
 
 supportedPatchTextElements(patch_type::AbstractString) = supportedPatchTextElements(patchType(patch_type))
+
+"""
+    supportedPlacements()
+
+The values accepted by the `placement` attribute of a `patch` element.
+`random` (the default when the attribute is absent) places `number` cells uniformly at random; `hexagonal` fills the patch with a hexagonal grid of cells with the given `spacing`.
+"""
+supportedPlacements() = ["random", "hexagonal"]
+
+function parsePlacement(patch::XMLElement, cell_type::String)
+    placement = attribute(patch, "placement")
+    if isnothing(placement)
+        return "random"
+    end
+    @assert placement in supportedPlacements() "placement=\"$(placement)\" for $(cell_type) with patch ID $(attribute(patch, "ID")) is not supported. Supported placements are: $(supportedPlacements())"
+    return placement
+end
 
 patchType(::Val{:disc}) = DiscPatch
 patchType(::Val{:annulus}) = AnnulusPatch
@@ -130,7 +147,7 @@ parseRestrictToDomain(patch::XMLElement, cell_type::String) = parseBoolElement(p
 
 function parseNumber(patch::XMLElement, cell_type::String)
     number = find_element(patch, "number")
-    @assert !isnothing(number) "Patch ID $(attribute(patch, "ID")) for $(cell_type) must have either a number element or a hexagonal_grid element set to true."
+    @assert !isnothing(number) "Patch ID $(attribute(patch, "ID")) for $(cell_type) uses random placement and so must have a number element."
     n = parse(Int, content(number))
     @assert n >= 0 "number for $(cell_type) with patch ID $(attribute(patch, "ID")) must be >= 0."
     return n
@@ -139,25 +156,25 @@ end
 """
     parseHexagonalGrid(patch, cell_type, hex_defaults)
 
-Return `nothing` if the patch does not request a hexagonal grid; otherwise, return the lattice spacing (distance between neighboring cell centers).
+Return `nothing` if the patch's `placement` attribute is not `hexagonal`; otherwise, return the lattice spacing (distance between neighboring cell centers).
 
 The spacing comes from the patch's `spacing` element if present, and otherwise from `hex_defaults.spacing_factor * 2 * cell_radius`.
-A patch cannot specify both `number` and `hexagonal_grid` since both determine how many cells are placed.
+A hexagonal patch cannot have a `number` element since the patch size and spacing determine how many cells are placed, and a random patch cannot have a `spacing` element.
 """
 function parseHexagonalGrid(patch::XMLElement, cell_type::String, hex_defaults::HexagonalDefaults)
     patch_descriptor = "$(cell_type) with patch ID $(attribute(patch, "ID"))"
-    is_hexagonal = parseBoolElement(patch, "hexagonal_grid", false, cell_type)
+    placement = parsePlacement(patch, cell_type)
     spacing_element = find_element(patch, "spacing")
-    if !is_hexagonal
-        @assert isnothing(spacing_element) "spacing is set for $(patch_descriptor) but hexagonal_grid is not true. spacing is only used for hexagonal grids."
+    if placement == "random"
+        @assert isnothing(spacing_element) "spacing is set for $(patch_descriptor) but its placement is random. spacing is only used with placement=\"hexagonal\"."
         return nothing
     end
-    @assert isnothing(find_element(patch, "number")) "Both number and hexagonal_grid are set for $(patch_descriptor). These are incompatible as both determine the number of cells placed in the patch."
+    @assert isnothing(find_element(patch, "number")) "number is set for $(patch_descriptor) but its placement is hexagonal. These are incompatible as both determine the number of cells placed in the patch."
     if !isnothing(spacing_element)
         spacing = parse(Float64, content(spacing_element))
     else
         radius = resolveCellRadius(hex_defaults.cell_radius, cell_type)
-        @assert !isnothing(radius) "hexagonal_grid is true for $(patch_descriptor) but no spacing element is set and no cell_radius was passed to generateICCell for this cell type."
+        @assert !isnothing(radius) "placement is hexagonal for $(patch_descriptor) but no spacing element is set and no cell_radius was passed to generateICCell for this cell type."
         spacing = hex_defaults.spacing_factor * 2 * radius
     end
     @assert spacing > 0 "spacing for $(patch_descriptor) must be positive. Got $(spacing)."
@@ -496,7 +513,8 @@ function createICCellXMLTemplate(path_to_folder::AbstractString)
     ## make a second disc patch filled with a hexagonal grid of cells
     e_patch = new_child(e_discs, "patch")
     set_attribute(e_patch, "ID", "2")
-    for (name, value) in [("x0", "200.0"), ("y0", "200.0"), ("z0", "0.0"), ("radius", "40.0"), ("hexagonal_grid", "true"), ("spacing", "12.0")]
+    set_attribute(e_patch, "placement", "hexagonal")
+    for (name, value) in [("x0", "200.0"), ("y0", "200.0"), ("z0", "0.0"), ("radius", "40.0"), ("spacing", "12.0")]
         e = new_child(e_patch, name)
         set_content(e, value)
     end

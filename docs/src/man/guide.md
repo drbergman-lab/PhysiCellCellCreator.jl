@@ -101,7 +101,9 @@ Possible values are "true", "false", "0", and "1".
 Add the following to the patch element to set: `<restrict_to_domain>false</restrict_to_domain>`.
 
 ### Hexagonal grid
-Instead of placing `number` cells uniformly at random, any patch type can be filled with a hexagonal grid (lattice) of cells by setting `<hexagonal_grid>true</hexagonal_grid>`.
+Each `<patch>` element can carry a `placement` attribute saying how cells are placed in it.
+The default, `placement="random"`, places `number` cells uniformly at random as described above.
+Setting `placement="hexagonal"` instead fills the patch with a hexagonal grid (lattice) of cells; the attribute tells you what to look for inside the patch: a `spacing` element rather than a `number` element.
 The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a cell placed at that center.
 Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
 For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` element.
@@ -109,12 +111,11 @@ For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` el
 The distance between neighboring cell centers is set by the optional `spacing` element:
 ```xml
 <patch_collection type="disc">
-  <patch ID="1">
+  <patch ID="1" placement="hexagonal">
       <x0>100.0</x0>
       <y0>100.0</y0>
       <z0>0.0</z0>
       <radius>50.0</radius>
-      <hexagonal_grid>true</hexagonal_grid>
       <spacing>12.0</spacing>
   </patch>
 </patch_collection>
@@ -132,8 +133,8 @@ generateICCell(path_to_ic_cell_xml, domain_dict; cell_radius=8.4, spacing_factor
 An error is thrown if a hexagonal grid patch has no `spacing` and no radius is available for its cell type.
 
 Notes:
-- `number` and `hexagonal_grid` cannot both be set in the same patch as both determine how many cells are placed. The number of cells in a hexagonal grid is determined by the patch size and the spacing.
-- `spacing` is only allowed when `hexagonal_grid` is true.
+- A `placement="hexagonal"` patch cannot have a `number` element as both determine how many cells are placed. The number of cells in a hexagonal grid is determined by the patch size and the spacing.
+- A random placement patch cannot have a `spacing` element.
 - `max_fails` is ignored for hexagonal grids since placement is deterministic. A warning is issued if no lattice points survive the patch, domain, and carveout filters.
 
 ### Carveouts
@@ -200,12 +201,11 @@ A full example XML is shown below.
           </patch_collection>
         </carveout_patches>
       </patch>
-      <patch ID="2">
+      <patch ID="2" placement="hexagonal">
         <x0>200.0</x0>
         <y0>200.0</y0>
         <z0>0.0</z0>
         <radius>40.0</radius>
-        <hexagonal_grid>true</hexagonal_grid>
         <spacing>12.0</spacing>
       </patch>
     </patch_collection>

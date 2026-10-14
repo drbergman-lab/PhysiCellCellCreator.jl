@@ -3,7 +3,7 @@ using LightXML, DataFrames
 hex_folder = "hex_test_folder"
 mkpath(hex_folder)
 
-function writePatchXML(path::String, patch_type::String, elements::Vector{Pair{String,String}}; cell_type::String="default", carveout::Union{Nothing,Tuple{String,Vector{Pair{String,String}}}}=nothing)
+function writePatchXML(path::String, patch_type::String, elements::Vector{Pair{String,String}}; cell_type::String="default", placement::Union{Nothing,String}="hexagonal", carveout::Union{Nothing,Tuple{String,Vector{Pair{String,String}}}}=nothing)
     xml_doc = XMLDocument()
     xml_root = create_root(xml_doc, "ic_cells")
     e_patches = new_child(xml_root, "cell_patches")
@@ -12,6 +12,9 @@ function writePatchXML(path::String, patch_type::String, elements::Vector{Pair{S
     set_attribute(e_collection, "type", patch_type)
     e_patch = new_child(e_collection, "patch")
     set_attribute(e_patch, "ID", "1")
+    if !isnothing(placement)
+        set_attribute(e_patch, "placement", placement)
+    end
     for (name, value) in elements
         set_content(new_child(e_patch, name), value)
     end
@@ -46,7 +49,7 @@ hex_domain = Dict{String,Float64}("x_min" => -500.0, "x_max" => 500.0, "y_min" =
 hex_xml = joinpath(hex_folder, "cells.xml")
 
 @testset "hexagonal disc" begin
-    writePatchXML(hex_xml, "disc", ["x0" => "10.0", "y0" => "-20.0", "z0" => "5.0", "radius" => "40.0", "hexagonal_grid" => "true", "spacing" => "10.0"])
+    writePatchXML(hex_xml, "disc", ["x0" => "10.0", "y0" => "-20.0", "z0" => "5.0", "radius" => "40.0", "spacing" => "10.0"])
     df = generateICCell(hex_xml, hex_domain)
     @test size(df, 1) > 0
     @test all(df.type .== "default")
@@ -62,7 +65,7 @@ hex_xml = joinpath(hex_folder, "cells.xml")
 end
 
 @testset "hexagonal annulus" begin
-    writePatchXML(hex_xml, "annulus", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "inner_radius" => "20.0", "outer_radius" => "60.0", "hexagonal_grid" => "true", "spacing" => "8.0"])
+    writePatchXML(hex_xml, "annulus", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "inner_radius" => "20.0", "outer_radius" => "60.0", "spacing" => "8.0"])
     df = generateICCell(hex_xml, hex_domain)
     @test size(df, 1) > 0
     r = sqrt.(df.x .^ 2 .+ df.y .^ 2)
@@ -71,7 +74,7 @@ end
 end
 
 @testset "hexagonal disc with normal" begin
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "hexagonal_grid" => "true", "spacing" => "10.0", "normal" => "1,0,0"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "spacing" => "10.0", "normal" => "1,0,0"])
     df = generateICCell(hex_xml, hex_domain)
     @test size(df, 1) > 0
     @test all(abs.(df.x) .< 1e-8) # disc lies in the plane x = 0
@@ -80,7 +83,7 @@ end
 end
 
 @testset "hexagonal rectangle" begin
-    writePatchXML(hex_xml, "rectangle", ["x0" => "-50.0", "y0" => "-50.0", "z0" => "0.0", "width" => "100.0", "height" => "100.0", "hexagonal_grid" => "true", "spacing" => "10.0"])
+    writePatchXML(hex_xml, "rectangle", ["x0" => "-50.0", "y0" => "-50.0", "z0" => "0.0", "width" => "100.0", "height" => "100.0", "spacing" => "10.0"])
     df = generateICCell(hex_xml, hex_domain)
     @test size(df, 1) > 0
     @test all(-50.0 - 1e-8 .<= df.x .<= 50.0 + 1e-8)
@@ -89,7 +92,7 @@ end
     @test any(abs.(df.x) .< 1e-8 .&& abs.(df.y) .< 1e-8) # a cell sits at the center of the rectangle
 
     # same rectangle with a disc carved out of the center
-    writePatchXML(hex_xml, "rectangle", ["x0" => "-50.0", "y0" => "-50.0", "z0" => "0.0", "x1" => "50.0", "y1" => "50.0", "hexagonal_grid" => "true", "spacing" => "10.0"];
+    writePatchXML(hex_xml, "rectangle", ["x0" => "-50.0", "y0" => "-50.0", "z0" => "0.0", "x1" => "50.0", "y1" => "50.0", "spacing" => "10.0"];
         carveout=("disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "25.0"]))
     df_carved = generateICCell(hex_xml, hex_domain)
     @test size(df_carved, 1) < size(df, 1)
@@ -97,7 +100,7 @@ end
 end
 
 @testset "hexagonal everywhere" begin
-    writePatchXML(hex_xml, "everywhere", ["hexagonal_grid" => "true", "spacing" => "50.0"])
+    writePatchXML(hex_xml, "everywhere", ["spacing" => "50.0"])
     small_domain = Dict{String,Float64}("x_min" => -100.0, "x_max" => 100.0, "y_min" => -100.0, "y_max" => 100.0, "z_min" => -10.0, "z_max" => 10.0)
     df = generateICCell(hex_xml, small_domain)
     @test size(df, 1) > 0
@@ -110,17 +113,17 @@ end
 @testset "restrict_to_domain with hexagonal grid" begin
     # disc extends past the domain edge
     small_domain = Dict{String,Float64}("x_min" => 0.0, "x_max" => 100.0, "y_min" => -100.0, "y_max" => 100.0, "z_min" => -10.0, "z_max" => 10.0)
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "hexagonal_grid" => "true", "spacing" => "10.0"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "spacing" => "10.0"])
     df_restricted = generateICCell(hex_xml, small_domain)
     @test all(df_restricted.x .>= 0.0)
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "hexagonal_grid" => "true", "spacing" => "10.0", "restrict_to_domain" => "false"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "30.0", "spacing" => "10.0", "restrict_to_domain" => "false"])
     df_unrestricted = generateICCell(hex_xml, small_domain)
     @test any(df_unrestricted.x .< 0.0)
     @test size(df_unrestricted, 1) > size(df_restricted, 1)
 end
 
 @testset "spacing from cell_radius" begin
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0"])
     @test_throws AssertionError generateICCell(hex_xml, hex_domain) # no spacing and no cell_radius
     # default spacing_factor is 0.95, so spacing = 0.95 * 2 * cell_radius
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0)
@@ -136,40 +139,44 @@ end
     @test_throws AssertionError generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=0.0)
 
     # explicit spacing takes precedence over cell_radius
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true", "spacing" => "10.0"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "spacing" => "10.0"])
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0, spacing_factor=1.0)
     @test all(isapprox.(nearestNeighborDistances(df), 10.0; atol=1e-8))
 
     # cell_radius is ignored by random placement
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "20"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "20"]; placement=nothing)
     df = generateICCell(hex_xml, hex_domain; cell_radius=6.0)
     @test size(df, 1) == 20
 end
 
-@testset "incompatible and invalid hexagonal settings" begin
-    # number and hexagonal_grid together
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10", "hexagonal_grid" => "true", "spacing" => "10.0"])
-    @test_throws AssertionError generateICCell(hex_xml, hex_domain)
-    # spacing without hexagonal_grid
+@testset "incompatible and invalid placement settings" begin
+    # number with placement="hexagonal"
     writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10", "spacing" => "10.0"])
     @test_throws AssertionError generateICCell(hex_xml, hex_domain)
-    # hexagonal_grid explicitly false falls back to random placement using number
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10", "hexagonal_grid" => "false"])
+    # spacing with random placement (attribute absent)
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10", "spacing" => "10.0"]; placement=nothing)
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain)
+    # spacing with explicit placement="random"
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10", "spacing" => "10.0"]; placement="random")
+    @test_throws AssertionError generateICCell(hex_xml, hex_domain)
+    # explicit placement="random" uses number
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "number" => "10"]; placement="random")
     @test size(generateICCell(hex_xml, hex_domain), 1) == 10
-    # neither number nor hexagonal_grid
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0"])
+    # random placement without number
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0"]; placement=nothing)
     @test_throws AssertionError generateICCell(hex_xml, hex_domain)
     # non-positive spacing
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true", "spacing" => "0.0"])
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "spacing" => "0.0"])
     @test_throws AssertionError generateICCell(hex_xml, hex_domain)
-    # non-boolean hexagonal_grid
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "yes", "spacing" => "10.0"])
+    # unsupported placement value
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "spacing" => "10.0"]; placement="square")
     @test_throws AssertionError generateICCell(hex_xml, hex_domain)
+    @test PhysiCellCellCreator.supportedPlacements() == ["random", "hexagonal"]
 end
 
 @testset "empty hexagonal grid warns" begin
     # the whole disc is carved out
-    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "hexagonal_grid" => "true", "spacing" => "10.0"];
+    writePatchXML(hex_xml, "disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "40.0", "spacing" => "10.0"];
         carveout=("disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "radius" => "100.0"]))
     df = @test_logs (:warn, r"placed no cells") generateICCell(hex_xml, hex_domain)
     @test size(df, 1) == 0
