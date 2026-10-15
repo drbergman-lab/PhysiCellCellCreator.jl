@@ -8,6 +8,7 @@ struct RectanglePatch end
 struct EverywherePatch end
 struct EllipticalDiscPatch end
 struct EllipsePatch end
+struct LinePatch end
 
 const patch_type_registry = [
     "disc" => DiscPatch,
@@ -16,6 +17,7 @@ const patch_type_registry = [
     "everywhere" => EverywherePatch,
     "elliptical_disc" => EllipticalDiscPatch,
     "ellipse" => EllipsePatch,
+    "line" => LinePatch,
 ]
 
 """
@@ -44,6 +46,7 @@ geometryElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_radius", "out
 geometryElements(::Type{EllipticalDiscPatch}) = ["x0", "y0", "z0", "a", "b", centered_frame_elements...]
 geometryElements(::Type{EllipsePatch}) = ["x0", "y0", "z0", "a", "b", "thickness", centered_frame_elements...]
 geometryElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height"]
+geometryElements(::Type{LinePatch}) = ["x1", "y1", "z1", "x2", "y2", "z2"]
 
 """
     supportedPatchTextElements(patch_type)
@@ -95,6 +98,13 @@ end
 function parseGeometry(::Type{RectanglePatch}, patch::XMLElement, descriptor::String)
     center, width, height = parseRectangleParameters(patch, descriptor)
     return Rectangle(width, height), Frame(center, [0.0, 0.0, 1.0], 0.0)
+end
+
+function parseGeometry(::Type{LinePatch}, patch::XMLElement, descriptor::String)
+    p1 = [parseFloatElement(patch, "x1", descriptor), parseFloatElement(patch, "y1", descriptor), parseOptionalFloatElement(patch, "z1", 0.0)]
+    p2 = [parseFloatElement(patch, "x2", descriptor), parseFloatElement(patch, "y2", descriptor), parseOptionalFloatElement(patch, "z2", 0.0)]
+    @assert p1 != p2 "The endpoints of line $(descriptor) coincide ($(p1)). A line must have positive length."
+    return Segment(norm(p2 .- p1)), frameAlong((p1 .+ p2) ./ 2, p2 .- p1)
 end
 
 # ---------------------------------------------------------------------------

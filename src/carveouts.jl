@@ -12,9 +12,9 @@ end
 """
     supportedCarveoutTypes()
 
-The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element: every patch type except `everywhere`, since an `everywhere` carveout would remove every cell of its patch.
+The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element: every patch type except `everywhere`, since an `everywhere` carveout would remove every cell of its patch, and `line`, since a line has no area and would remove none.
 """
-supportedCarveoutTypes() = filter(!=("everywhere"), supportedPatchTypes())
+supportedCarveoutTypes() = filter(∉(["everywhere", "line"]), supportedPatchTypes())
 
 function carveoutType(s::AbstractString)
     @assert s in supportedCarveoutTypes() "Patch type $(s) is not supported for carveouts. Supported types are: $(supportedCarveoutTypes())"

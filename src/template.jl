@@ -67,6 +67,10 @@ function createICCellXMLTemplate(path_to_folder::AbstractString)
     e_ellipses = addPatchCollection!(e_patches, "ellipse")
     addPatch!(e_ellipses, "1", ["x0" => "-200.0", "y0" => "200.0", "z0" => "0.0", "a" => "80.0", "b" => "40.0", "thickness" => "20.0", "rotation" => "pi/6", "spacing" => "10.0"]; placement="hexagonal")
 
+    # line patch: cells evenly spaced along a straight line between two points
+    e_lines = addPatchCollection!(e_patches, "line")
+    addPatch!(e_lines, "1", ["x1" => "-400.0", "y1" => "-450.0", "x2" => "400.0", "y2" => "-350.0", "spacing" => "20.0"]; placement="hexagonal")
+
     # everywhere patch avoiding an annulus and the ellipse (with its shell) above
     e_everywhere = addPatchCollection!(e_patches, "everywhere")
     e_patch = addPatch!(e_everywhere, "1", ["number" => "78"])
