@@ -12,7 +12,7 @@ end
 """
     supportedCarveoutTypes()
 
-The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element: every patch type except `everywhere`, which has no geometry of its own.
+The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element: every patch type except `everywhere`, since an `everywhere` carveout would remove every cell of its patch.
 """
 supportedCarveoutTypes() = filter(!=("everywhere"), supportedPatchTypes())
 
