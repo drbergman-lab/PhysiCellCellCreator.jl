@@ -1,7 +1,7 @@
 name = "PhysiCellCellCreator"
 uuid = "eac91067-0c6e-4a29-b848-3b4e7cf67017"
 authors = ["Daniel Bergman <danielrbergman@gmail.com> and contributors"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -19,7 +19,8 @@ LinearAlgebra = "1.10.8 - 1"
 julia = "1.10"
 
 [extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Random", "Test"]
