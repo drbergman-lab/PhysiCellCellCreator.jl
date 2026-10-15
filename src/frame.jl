@@ -6,7 +6,8 @@ Local coordinate frame of a patch or carveout: an origin at `center` and an orth
 `n` is the unit `normal`.
 `u1` is the unit projection of the x-axis onto the plane perpendicular to `n` (or of the y-axis if `n` is parallel to the x-axis), and `u2 = n × u1`.
 Both are then rotated counter-clockwise about `n` by `rotation` radians.
-For the default normal `(0, 0, 1)` and zero rotation, the frame is the domain's own axes, so a slightly tilted normal gives a slightly tilted frame.
+For the default normal `(0, 0, 1)` and zero rotation, the frame is the domain's own axes.
+The frame varies continuously with the normal except at normals parallel to the x-axis, where the fallback applies.
 
 Shapes are defined in local coordinates `(c1, c2, c3)` along `(u1, u2, n)`; see [`toDomain`](@ref) and [`toLocal`](@ref).
 """

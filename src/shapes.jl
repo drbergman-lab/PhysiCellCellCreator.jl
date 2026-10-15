@@ -131,9 +131,13 @@ function sampleUniform(shape::EllipticalRing, n::Int)
     c1 = Float64[]
     c2 = Float64[]
     while length(c1) < n
+        # propose enough candidates that one round usually suffices: 20% more than the expected need absorbs the
+        # binomial fluctuation in how many are accepted, and the +8 does the same for small n, where that fluctuation
+        # is large relative to n. Neither value is special; a second round just proposes the shortfall.
         m = min(ceil(Int, 1.2 * (n - length(c1)) / acceptance) + 8, max_proposal_batch)
         d1, d2 = sampleUniform(outer, m)
-        keep_ind = ellipseFunctional.(d1, d2, a, b) .>= 1
+        # no tolerance: it only matters for lattice points landing exactly on the boundary, which random samples do with probability zero
+        keep_ind = inside(shape, d1, d2)
         append!(c1, d1[keep_ind])
         append!(c2, d2[keep_ind])
     end

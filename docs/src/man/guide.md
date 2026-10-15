@@ -165,15 +165,16 @@ The vector does not need to be normalized.
 
 Within its plane, the patch's local `x` direction (along which `a` is measured) is the projection of the domain's `x`-axis onto the plane, or of the `y`-axis if the normal is parallel to the `x`-axis.
 The local `y` direction (along which `b` is measured) is perpendicular to it in the plane, such that the local `x`, local `y`, and normal directions form a right-handed system.
-For the default normal, these are just the domain's `x` and `y` axes, and a slightly tilted normal gives a slightly tilted patch.
+For the default normal, these are just the domain's `x` and `y` axes.
 
-The `rotation` element then turns the patch counter-clockwise about its normal (counter-clockwise when looking down the normal towards the patch).
+The `rotation` element then turns the patch counter-clockwise about its normal, i.e., counter-clockwise as seen by a viewer at the tip of the normal looking back at the patch.
+For the default normal this is counter-clockwise as seen from above (from `+z`); for the normal `(0, 0, -1)` the same `rotation` value turns the patch clockwise as seen from above.
 Its value follows the rules of PhysiCellECMCreator.jl:
 - by default, the value is in degrees, e.g., `<rotation>30</rotation>`;
 - if the value contains `pi` or `π`, it is in radians, e.g., `<rotation>pi/6</rotation>`, `<rotation>-2pi/3</rotation>`, or `<rotation>0.5*π</rotation>`;
 - the units can be set explicitly with a `units` attribute starting with `rad` or `deg`, e.g., `<rotation units="rad">0.5236</rotation>`.
 
-Using `pi` with `units="deg"` is an error.
+Using `pi` or `π` with `units="deg"` is an error.
 For a `disc` or `annulus`, the rotation only matters for a [Hexagonal grid](@ref), whose lattice turns with the patch.
 
 ## Refined control of cell placement
