@@ -9,17 +9,15 @@ struct Carveout{S<:Shape}
     frame::Frame
 end
 
-const carveout_types = ["disc", "annulus", "rectangle", "elliptical_disc", "ellipse"]
-
 """
     supportedCarveoutTypes()
 
-The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element.
+The values accepted by the `type` attribute of a `patch_collection` inside a `carveout_patches` element: every patch type except `everywhere`, which has no geometry of its own.
 """
-supportedCarveoutTypes() = copy(carveout_types)
+supportedCarveoutTypes() = filter(!=("everywhere"), supportedPatchTypes())
 
 function carveoutType(s::AbstractString)
-    @assert s in carveout_types "Patch type $(s) is not supported for carveouts. Supported types are: $(supportedCarveoutTypes())"
+    @assert s in supportedCarveoutTypes() "Patch type $(s) is not supported for carveouts. Supported types are: $(supportedCarveoutTypes())"
     return patchType(s)
 end
 

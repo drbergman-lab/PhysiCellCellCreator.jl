@@ -74,7 +74,11 @@ const max_proposal_batch = 1_000_000
     inside(shape, c1, c2; tol=0.0)
 
 Boolean vector saying which local points `(c1, c2)` lie in `shape`, including its boundary.
-Points within `tol` outside the boundary are also counted as inside; this absorbs floating-point rounding when filtering lattice points.
+This is the single membership test used by carveouts, lattice filtering, and rejection sampling.
+
+`tol` enlarges the shape (for a ring, it also shrinks the inner ellipse) so that lattice points which land on the boundary up to floating-point rounding are kept.
+It is only passed for hexagonal placement; carveouts and random sampling use `tol = 0`, since random points hit a boundary with probability zero.
+For an ellipse, `tol` is added to the axes, which keeps a slightly thinner band than a true distance band would; that is immaterial at the rounding scale it is meant for.
 """
 function inside(shape::EllipticalDisc, c1::AbstractVector{<:Real}, c2::AbstractVector{<:Real}; tol::Real=0.0)
     return ellipseFunctional.(c1, c2, shape.a + tol, shape.b + tol) .<= 1
