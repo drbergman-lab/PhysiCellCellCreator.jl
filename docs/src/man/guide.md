@@ -8,7 +8,7 @@ createICCellXMLTemplate(path_to_folder) # will create cells.xml inside the folde
 ```
 
 Then, you can edit the XML file as needed.
-Note, the root of the XML file is `<ic_ecm>`.
+Note, the root of the XML file is `<ic_cells>`.
 
 ## Cell patches
 The children of the root are `<cell_patches>` elements, each corresponding to a different cell type in the PhysiCell simulation.
@@ -16,8 +16,10 @@ The cell type is set by the attribute `name`, e.g., `<cell_patches name="fibrobl
 
 ## Patch collection
 Each `<cell_patches>` element contains a collection of `<patch_collection>` elements, each containing a particular type of patch.
-The currently supported patch types are `everywhere`, `disc`, `annulus`, and `rectangle`.
+The currently supported patch types are `everywhere`, `disc`, `annulus`, `elliptical_disc`, `ellipse`, and `rectangle`.
 A typical example is `<patch_collection type="everywhere">`.
+
+The elliptical patches use the same names, elements, and conventions as the patches of [PhysiCellECMCreator.jl](https://github.com/drbergman-lab/PhysiCellECMCreator.jl), so an ellipse described in one package describes the same region in the other.
 
 ## Patch
 Each `<patch_collection>` element contains a collection of `<patch>` elements.
@@ -33,6 +35,7 @@ The `everywhere` patch just has a `number` element, specifying the number of cel
   </patch>
 </patch_collection>
 ```
+Cells are placed in the `xy`-plane at `z = 0`, even if the domain is 3D.
 
 ### `disc`
 The `disc` patch has the following parameters:
@@ -51,9 +54,7 @@ The `disc` patch has the following parameters:
 </patch_collection>
 ```
 
-A `disc` patch can also have a `normal` element, defining the normal vector of the disc.
-If omitted, the normal vector is assumed to be `(0, 0, 1)`.
-To set this, add a child element to the patch as `<normal>1.0,0.0,0.0</normal>`.
+A `disc` patch can also have `normal` and `rotation` elements; see [Orientation](@ref).
 Note: the `disc` really is a 2D disc, not a solid sphere even if the PhysiCell simulation is 3D.
 
 ### `annulus`
@@ -70,6 +71,68 @@ The `annulus` patch has identical parameters to the `disc` patch, but with `radi
   </patch>
 </patch_collection>
 ```
+
+### `elliptical_disc`
+The `elliptical_disc` patch is a filled ellipse with the following parameters:
+- `x0`, `y0`, `z0`: the center of the ellipse
+- `a`, `b`: the semi-axes of the ellipse along the patch's local `x` and `y` directions, respectively (see [Orientation](@ref))
+- `rotation`: optional, the counter-clockwise rotation of the ellipse about its normal (see [Orientation](@ref))
+- `number`: the number of cells to place in the ellipse
+
+With the default orientation, the patch is the region
+
+```math
+\begin{aligned}
+\frac{(x-x_0)^2}{a^2} + \frac{(y-y_0)^2}{b^2} \le 1
+\end{aligned}
+```
+
+rotated counter-clockwise by `rotation` about its center.
+```xml
+<patch_collection type="elliptical_disc">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <a>80.0</a>
+      <b>40.0</b>
+      <rotation>pi/6</rotation>
+      <number>50</number>
+  </patch>
+</patch_collection>
+```
+A `disc` is an `elliptical_disc` with `a` and `b` both equal to `radius`.
+
+### `ellipse`
+The `ellipse` patch is a ring of cells around an ellipse: it has the same parameters as `elliptical_disc` plus a `thickness`.
+Cells are placed between the ellipse with semi-axes `a` and `b` and the ellipse with semi-axes `a + thickness` and `b + thickness`, i.e., the ring extends outward from the ellipse.
+With the default orientation, the patch is the region
+
+```math
+\begin{aligned}
+1 \le \frac{(x-x_0)^2}{a^2} + \frac{(y-y_0)^2}{b^2}
+\quad\text{and}\quad
+\frac{(x-x_0)^2}{(a+\text{thickness})^2} + \frac{(y-y_0)^2}{(b+\text{thickness})^2} \le 1
+\end{aligned}
+```
+
+```xml
+<patch_collection type="ellipse">
+  <patch ID="1">
+      <x0>100.0</x0>
+      <y0>100.0</y0>
+      <z0>0.0</z0>
+      <a>80.0</a>
+      <b>40.0</b>
+      <thickness>20.0</thickness>
+      <rotation>pi/6</rotation>
+      <number>50</number>
+  </patch>
+</patch_collection>
+```
+An `annulus` is an `ellipse` with `a` and `b` both equal to `inner_radius` and `thickness` equal to `outer_radius - inner_radius`.
+
+To fill an ellipse with one cell type and surround it with a shell of another (the `ellipse_with_shell` patch of PhysiCellECMCreator.jl), use an `elliptical_disc` patch under one `cell_patches` element and an `ellipse` patch with the same `x0`, `y0`, `z0`, `a`, `b`, and `rotation` under the other.
 
 ### `rectangle`
 The `rectangle` patch is assumed to be parallel to the xy-plane and has the following parameters:
@@ -91,6 +154,28 @@ The `rectangle` patch is assumed to be parallel to the xy-plane and has the foll
 ```
 
 Note: this patch will place cells with x-coordinate in [100.0, 150.0] and y-coordinate in [100.0, 200.0].
+Instead of `width` and `height`, the opposite corner can be given with `x1` and `y1`.
+
+## Orientation
+The `disc`, `annulus`, `elliptical_disc`, and `ellipse` patches (and the carveouts of the same names) can be oriented in 3D with two optional elements.
+
+The `normal` element sets the normal vector of the plane the patch lies in, as three comma-separated numbers, e.g., `<normal>1.0,0.0,0.0</normal>`.
+If omitted, the normal vector is assumed to be `(0, 0, 1)`, i.e., the patch lies in the `xy`-plane.
+The vector does not need to be normalized.
+
+Within its plane, the patch's local `x` direction (along which `a` is measured) is the projection of the domain's `x`-axis onto the plane, or of the `y`-axis if the normal is parallel to the `x`-axis.
+The local `y` direction (along which `b` is measured) is perpendicular to it in the plane, such that the local `x`, local `y`, and normal directions form a right-handed system.
+For the default normal, these are just the domain's `x` and `y` axes.
+
+The `rotation` element then turns the patch counter-clockwise about its normal, i.e., counter-clockwise as seen by a viewer at the tip of the normal looking back at the patch.
+For the default normal this is counter-clockwise as seen from above (from `+z`); for the normal `(0, 0, -1)` the same `rotation` value turns the patch clockwise as seen from above.
+Its value follows the rules of PhysiCellECMCreator.jl:
+- by default, the value is in degrees, e.g., `<rotation>30</rotation>`;
+- if the value contains `pi` or `π`, it is in radians, e.g., `<rotation>pi/6</rotation>`, `<rotation>-2pi/3</rotation>`, or `<rotation>0.5*π</rotation>`;
+- the units can be set explicitly with a `units` attribute starting with `rad` or `deg`, e.g., `<rotation units="rad">0.5236</rotation>`.
+
+Using `pi` or `π` with `units="deg"` is an error.
+For a `disc` or `annulus`, the rotation only matters for a [Hexagonal grid](@ref), whose lattice turns with the patch.
 
 ## Refined control of cell placement
 
@@ -104,9 +189,9 @@ Add the following to the patch element to set: `<restrict_to_domain>false</restr
 Each `<patch>` element can carry a `placement` attribute saying how cells are placed in it.
 The default, `placement="random"`, places `number` cells uniformly at random as described above.
 Setting `placement="hexagonal"` instead fills the patch with a hexagonal grid (lattice) of cells; the attribute tells you what to look for inside the patch: a `spacing` element rather than a `number` element.
-The grid is centered on the patch (the center of a `disc`/`annulus`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a cell placed at that center.
+The grid is centered on the patch (the center of a `disc`, `annulus`, `elliptical_disc`, or `ellipse`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a lattice point at that center.
 Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
-For a `disc` or `annulus`, the grid lies in the plane defined by the `normal` element.
+The grid lies in the plane of the patch and its rows run along the patch's local `x` direction, so `normal` and `rotation` orient the lattice along with the patch (see [Orientation](@ref)).
 
 The distance between neighboring cell centers is set by the optional `spacing` element:
 ```xml
@@ -140,9 +225,13 @@ Notes:
 
 ### Carveouts
 Every patch type can also include a `<carveout_patches>` element, which specifies regions where cells should not be placed.
-The currently supported carveouts are `disc`, `annulus`, and `rectangle`.
-These follow the same structure as the patches above, but do not contain a `number` element.
-`disc` and `annulus` carveouts cannot have a `normal` element, they are assumed to be parallel to the xy-plane.
+The currently supported carveouts are `disc`, `annulus`, `elliptical_disc`, `ellipse`, and `rectangle`.
+These follow the same structure as the patches above, but do not contain a `number` (or `spacing`) element.
+
+A carveout removes every cell whose projection onto the carveout's plane lies inside the carveout's shape, i.e., a carveout is an infinite prism along its normal.
+`disc`, `annulus`, `elliptical_disc`, and `ellipse` carveouts may have `normal` and `rotation` elements, as described in [Orientation](@ref); by default they are prisms along the `z`-axis.
+`rectangle` carveouts are always prisms along the `z`-axis.
+For cells in the plane of the carveout (the usual case), this is just "inside the shape".
 
 To add a carveout to a patch, add a `<carveout_patches>` element to the patch, then follow the same XML structure as the patches above.
 ```xml
@@ -154,14 +243,16 @@ To add a carveout to a patch, add a `<carveout_patches>` element to the patch, t
       <radius>50.0</radius>
       <number>50</number>
       <carveout_patches>
-          <patch_collections type="disc">
+          <patch_collection type="elliptical_disc">
               <patch ID="1">
                   <x0>130.0</x0>
                   <y0>130.0</y0>
                   <z0>0.0</z0>
-                  <radius>15.0</radius>
+                  <a>15.0</a>
+                  <b>8.0</b>
+                  <rotation>45</rotation>
               </patch>
-          </patch_collections>
+          </patch_collection>
       </carveout_patches>
   </patch>
 </patch_collection>
@@ -176,7 +267,7 @@ If omitted, it is assumed to be 100.
 Add the following to the patch element (not the carveout, but the patch itself) to set: `<max_fails>100</max_fails>`.
 
 ## Example XML
-A full example XML is shown below.
+A full example XML, as created by `createICCellXMLTemplate`, is shown below.
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <ic_cells>
@@ -226,8 +317,8 @@ A full example XML is shown below.
         <x0>-50.0</x0>
         <y0>-50.0</y0>
         <z0>0.0</z0>
-        <width>100.0</width>
-        <height>100.0</height>
+        <x1>50.0</x1>
+        <y1>50.0</y1>
         <number>10</number>
         <carveout_patches>
           <patch_collection type="disc">
@@ -241,6 +332,29 @@ A full example XML is shown below.
         </carveout_patches>
       </patch>
     </patch_collection>
+    <patch_collection type="elliptical_disc">
+      <patch ID="1">
+        <x0>-200.0</x0>
+        <y0>200.0</y0>
+        <z0>0.0</z0>
+        <a>80.0</a>
+        <b>40.0</b>
+        <rotation>pi/6</rotation>
+        <number>60</number>
+      </patch>
+    </patch_collection>
+    <patch_collection type="ellipse">
+      <patch ID="1" placement="hexagonal">
+        <x0>-200.0</x0>
+        <y0>200.0</y0>
+        <z0>0.0</z0>
+        <a>80.0</a>
+        <b>40.0</b>
+        <thickness>20.0</thickness>
+        <rotation>pi/6</rotation>
+        <spacing>10.0</spacing>
+      </patch>
+    </patch_collection>
     <patch_collection type="everywhere">
       <patch ID="1">
         <number>78</number>
@@ -252,6 +366,16 @@ A full example XML is shown below.
               <z0>0.0</z0>
               <inner_radius>100.0</inner_radius>
               <outer_radius>400.0</outer_radius>
+            </patch>
+          </patch_collection>
+          <patch_collection type="elliptical_disc">
+            <patch ID="1">
+              <x0>-200.0</x0>
+              <y0>200.0</y0>
+              <z0>0.0</z0>
+              <a>100.0</a>
+              <b>60.0</b>
+              <rotation>pi/6</rotation>
             </patch>
           </patch_collection>
         </carveout_patches>
