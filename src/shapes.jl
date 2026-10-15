@@ -64,6 +64,13 @@ end
 ellipseFunctional(c1::Real, c2::Real, a::Real, b::Real) = (c1 / a)^2 + (c2 / b)^2
 
 """
+    max_proposal_batch
+
+Upper bound on the number of candidate points proposed in one round of rejection sampling, bounding temporary memory for very thin rings (which then take more rounds).
+"""
+const max_proposal_batch = 1_000_000
+
+"""
     inside(shape, c1, c2; tol=0.0)
 
 Boolean vector saying which local points `(c1, c2)` lie in `shape`, including its boundary.
@@ -124,7 +131,7 @@ function sampleUniform(shape::EllipticalRing, n::Int)
     c1 = Float64[]
     c2 = Float64[]
     while length(c1) < n
-        m = ceil(Int, 1.2 * (n - length(c1)) / acceptance) + 8
+        m = min(ceil(Int, 1.2 * (n - length(c1)) / acceptance) + 8, max_proposal_batch)
         d1, d2 = sampleUniform(outer, m)
         keep_ind = ellipseFunctional.(d1, d2, a, b) .>= 1
         append!(c1, d1[keep_ind])

@@ -44,7 +44,6 @@ geometryElements(::Type{AnnulusPatch}) = ["x0", "y0", "z0", "inner_radius", "out
 geometryElements(::Type{EllipticalDiscPatch}) = ["x0", "y0", "z0", "a", "b", centered_frame_elements...]
 geometryElements(::Type{EllipsePatch}) = ["x0", "y0", "z0", "a", "b", "thickness", centered_frame_elements...]
 geometryElements(::Type{RectanglePatch}) = ["x0", "y0", "z0", "x1", "y1", "width", "height"]
-geometryElements(::Type{EverywherePatch}) = String[]
 
 """
     supportedPatchTextElements(patch_type)

@@ -118,6 +118,12 @@ end
     n = [1e-6, 0.0, 1.0] / norm([1e-6, 0.0, 1.0])
     @test all(abs.(df.x .* n[1] .+ df.y .* n[2] .+ df.z .* n[3]) .< 1e-9) # in the plane
 
+    # a normal nearly parallel to x still uses the projected x-axis (almost -z) for a, not the y-axis fallback
+    writeShapeXML(shape_xml, "elliptical_disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "a" => "120.0", "b" => "40.0", "normal" => "1,0,1e-6", "number" => "50000"])
+    df = generateICCell(shape_xml, shape_domain)
+    @test all(abs.(df.x .+ 1e-6 .* df.z) .< 1e-9) # in the plane
+    @test angleDifference(principalAxisAngle(df.y, df.z), π / 2) < deg2rad(1)
+
     # normal along x: a runs along y (the projection of the y-axis), rotation turns about x
     writeShapeXML(shape_xml, "elliptical_disc", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "a" => "120.0", "b" => "40.0", "normal" => "2,0,0", "rotation" => "pi/4", "number" => "50000"])
     df = generateICCell(shape_xml, shape_domain)
@@ -142,6 +148,19 @@ end
     # uniform in area: the fraction inside the ellipse with axes (115, 65) is the area ratio
     expected = (115 * 65 - 100 * 50) / (130 * 80 - 100 * 50)
     @test isapprox(count(ellipseFunctional.(c1, c2, 115.0, 65.0) .<= 1) / size(df, 1), expected; atol=0.01)
+
+    # a very thin ring is sampled in bounded batches
+    writeShapeXML(shape_xml, "ellipse", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "a" => "100.0", "b" => "50.0", "thickness" => "0.01", "number" => "200"])
+    df = generateICCell(shape_xml, shape_domain)
+    @test size(df, 1) == 200
+    @test all(ellipseFunctional.(df.x, df.y, 100.01, 50.01) .<= 1 + 1e-12)
+    @test all(ellipseFunctional.(df.x, df.y, 100.0, 50.0) .>= 1 - 1e-12)
+    @test PhysiCellCellCreator.max_proposal_batch == 1_000_000
+
+    # a tolerance larger than the inner axes keeps everything inside the (enlarged) outer ellipse
+    ring = PhysiCellCellCreator.EllipticalRing(100.0, 50.0, 30.0)
+    @test PhysiCellCellCreator.inside(ring, [0.0, 140.0, 200.0], [0.0, 0.0, 0.0]; tol=60.0) == [true, true, false]
+    @test PhysiCellCellCreator.inside(ring, [0.0, 140.0], [0.0, 0.0]; tol=0.0) == [false, false]
 
     # thickness is required and must be positive
     writeShapeXML(shape_xml, "ellipse", ["x0" => "0.0", "y0" => "0.0", "z0" => "0.0", "a" => "100.0", "b" => "50.0", "number" => "10"])

@@ -22,8 +22,11 @@ function Frame(center::AbstractVector{<:Real}, normal::AbstractVector{<:Real}, r
     magnitude = norm(n)
     @assert magnitude > 0 "A normal vector must be non-zero."
     n ./= magnitude
-    reference = abs(n[1]) < 1 - 1e-12 ? [1.0, 0.0, 0.0] : [0.0, 1.0, 0.0]
-    u1 = reference .- dot(reference, n) .* n
+    # n × (e × n) is the projection of e onto the plane perpendicular to n, computed without cancellation for nearly parallel vectors
+    u1 = cross(n, cross([1.0, 0.0, 0.0], n))
+    if norm(u1) < 1e-12 # the normal is parallel to the x-axis
+        u1 = cross(n, cross([0.0, 1.0, 0.0], n))
+    end
     u1 ./= norm(u1)
     u2 = cross(n, u1)
     c, s = cos(rotation), sin(rotation)
