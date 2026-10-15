@@ -4,6 +4,7 @@
 A region in which cells are placed (a patch) or from which they are removed (a carveout), defined in the local coordinates of a [`Frame`](@ref).
 
 Every shape implements [`sampleUniform`](@ref), [`inside`](@ref), and [`bounds`](@ref).
+See the manual page "Adding a new shape" for how to add one.
 """
 abstract type Shape end
 

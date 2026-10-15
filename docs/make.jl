@@ -15,7 +15,8 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Manual" => Any[
-            "Guide" => "man/guide.md"
+            "Guide" => "man/guide.md",
+            "Adding a new shape" => "man/extending.md"
         ]
     ],
 )
