@@ -8,6 +8,11 @@ end
 
 parseFloatElement(patch::XMLElement, name::String, descriptor::String) = parse(Float64, strip(content(findRequiredElement(patch, name, descriptor))))
 
+function parseOptionalFloatElement(patch::XMLElement, name::String, default::Float64)
+    element = find_element(patch, name)
+    return isnothing(element) ? default : parse(Float64, strip(content(element)))
+end
+
 function parsePositiveFloatElement(patch::XMLElement, name::String, descriptor::String)
     value = parseFloatElement(patch, name, descriptor)
     @assert value > 0 "$(name) for $(descriptor) must be positive. Got $(value)."

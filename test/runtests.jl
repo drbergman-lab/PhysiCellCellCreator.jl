@@ -5,4 +5,5 @@ using PhysiCellCellCreator, Test
     include("./WriteCellsTests.jl")
     include("./HexagonalGridTests.jl")
     include("./ShapeTests.jl")
+    include("./LineTests.jl")
 end

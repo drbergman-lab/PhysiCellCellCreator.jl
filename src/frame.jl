@@ -37,6 +37,28 @@ function Frame(center::AbstractVector{<:Real}, normal::AbstractVector{<:Real}, r
 end
 
 """
+    frameAlong(center, direction)
+
+A [`Frame`](@ref) whose local x direction is `direction`, for shapes (such as a [`Segment`](@ref)) that only use their local x axis.
+The normal is an arbitrary unit vector perpendicular to `direction` (perpendicular to the z-axis when possible), and the local y axis completes the right-handed system.
+"""
+function frameAlong(center::AbstractVector{<:Real}, direction::AbstractVector{<:Real})
+    @assert length(center) == 3 "A frame center must have three coordinates. Got $(center)."
+    @assert length(direction) == 3 "A direction vector must have three components. Got $(direction)."
+    u1 = Float64.(direction)
+    magnitude = norm(u1)
+    @assert magnitude > 0 "A direction vector must be non-zero."
+    u1 ./= magnitude
+    n = cross(u1, [0.0, 0.0, 1.0])
+    if norm(n) < 1e-12 # the direction is parallel to the z-axis
+        n = cross(u1, [1.0, 0.0, 0.0])
+    end
+    n ./= norm(n)
+    u2 = cross(n, u1)
+    return Frame(Float64.(center), [u1 u2 n])
+end
+
+"""
     toDomain(frame, c1, c2)
 
 Map in-plane local coordinates `(c1, c2)` (vectors) of a planar shape to a `DataFrame` with the domain coordinates `x`, `y`, `z`.

@@ -16,7 +16,7 @@ The cell type is set by the attribute `name`, e.g., `<cell_patches name="fibrobl
 
 ## Patch collection
 Each `<cell_patches>` element contains a collection of `<patch_collection>` elements, each containing a particular type of patch.
-The currently supported patch types are `everywhere`, `disc`, `annulus`, `elliptical_disc`, `ellipse`, and `rectangle`.
+The currently supported patch types are `everywhere`, `disc`, `annulus`, `elliptical_disc`, `ellipse`, `rectangle`, and `line`.
 A typical example is `<patch_collection type="everywhere">`.
 
 The elliptical patches use the same names, elements, and conventions as the patches of [PhysiCellECMCreator.jl](https://github.com/drbergman-lab/PhysiCellECMCreator.jl), so an ellipse described in one package describes the same region in the other.
@@ -156,6 +156,29 @@ The `rectangle` patch is assumed to be parallel to the xy-plane and has the foll
 Note: this patch will place cells with x-coordinate in [100.0, 150.0] and y-coordinate in [100.0, 200.0].
 Instead of `width` and `height`, the opposite corner can be given with `x1` and `y1`.
 
+### `line`
+The `line` patch places cells on the straight line segment between two points:
+- `x1`, `y1`, `z1`: the first endpoint
+- `x2`, `y2`, `z2`: the second endpoint
+- `number`: the number of cells to place on the line
+
+`z1` and `z2` are optional and default to `0`, so a 2D line needs only `x1`, `y1`, `x2`, and `y2`.
+```xml
+<patch_collection type="line">
+  <patch ID="1">
+      <x1>-100.0</x1>
+      <y1>0.0</y1>
+      <x2>100.0</x2>
+      <y2>50.0</y2>
+      <number>20</number>
+  </patch>
+</patch_collection>
+```
+With random placement, cells are placed uniformly along the segment.
+With `placement="hexagonal"` (see [Hexagonal grid](@ref)), cells are evenly spaced along the segment at the given `spacing`, with a cell at the midpoint; the endpoints get cells only if the half-length is a multiple of the spacing.
+A `line` has no `normal` or `rotation`: its direction is set by its endpoints.
+Carveouts apply as usual, so a line passing through a carveout gets a gap.
+
 ## Orientation
 The `disc`, `annulus`, `elliptical_disc`, and `ellipse` patches (and the carveouts of the same names) can be oriented in 3D with two optional elements.
 
@@ -189,7 +212,8 @@ Add the following to the patch element to set: `<restrict_to_domain>false</restr
 Each `<patch>` element can carry a `placement` attribute saying how cells are placed in it.
 The default, `placement="random"`, places `number` cells uniformly at random as described above.
 Setting `placement="hexagonal"` instead fills the patch with a hexagonal grid (lattice) of cells; the attribute tells you what to look for inside the patch: a `spacing` element rather than a `number` element.
-The grid is centered on the patch (the center of a `disc`, `annulus`, `elliptical_disc`, or `ellipse`, the center of a `rectangle`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a lattice point at that center.
+The grid is centered on the patch (the center of a `disc`, `annulus`, `elliptical_disc`, or `ellipse`, the center of a `rectangle`, the midpoint of a `line`, or the `x`/`y` center of the domain at `z = 0` for `everywhere`, as with random `everywhere` placement) with a lattice point at that center.
+For a `line`, the grid reduces to evenly spaced cells along the line.
 Only the lattice points inside the patch are kept, and `restrict_to_domain` and carveouts are applied as usual.
 The grid lies in the plane of the patch and its rows run along the patch's local `x` direction, so `normal` and `rotation` orient the lattice along with the patch (see [Orientation](@ref)).
 
@@ -225,7 +249,7 @@ Notes:
 
 ### Carveouts
 Every patch type can also include a `<carveout_patches>` element, which specifies regions where cells should not be placed.
-The currently supported carveouts are `disc`, `annulus`, `elliptical_disc`, `ellipse`, and `rectangle`.
+The currently supported carveouts are `disc`, `annulus`, `elliptical_disc`, `ellipse`, and `rectangle`; `everywhere` and `line` cannot be carveouts (the first would remove every cell, the second none).
 These follow the same structure as the patches above, but do not contain a `number` (or `spacing`) element.
 
 A carveout removes every cell whose projection onto the carveout's plane lies inside the carveout's shape, i.e., a carveout is an infinite prism along its normal.
@@ -353,6 +377,15 @@ A full example XML, as created by `createICCellXMLTemplate`, is shown below.
         <thickness>20.0</thickness>
         <rotation>pi/6</rotation>
         <spacing>10.0</spacing>
+      </patch>
+    </patch_collection>
+    <patch_collection type="line">
+      <patch ID="1" placement="hexagonal">
+        <x1>-400.0</x1>
+        <y1>-450.0</y1>
+        <x2>400.0</x2>
+        <y2>-350.0</y2>
+        <spacing>20.0</spacing>
       </patch>
     </patch_collection>
     <patch_collection type="everywhere">

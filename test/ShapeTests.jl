@@ -320,7 +320,7 @@ end
 end
 
 @testset "supported types and elements" begin
-    @test PhysiCellCellCreator.supportedPatchTypes() == ["disc", "annulus", "rectangle", "everywhere", "elliptical_disc", "ellipse"]
+    @test PhysiCellCellCreator.supportedPatchTypes() == ["disc", "annulus", "rectangle", "everywhere", "elliptical_disc", "ellipse", "line"]
     @test PhysiCellCellCreator.supportedCarveoutTypes() == ["disc", "annulus", "rectangle", "elliptical_disc", "ellipse"]
     @test PhysiCellCellCreator.supportedPatchTextElements("ellipse") == ["x0", "y0", "z0", "a", "b", "thickness", "normal", "rotation", "number", "spacing", "max_fails", "restrict_to_domain"]
     @test PhysiCellCellCreator.supportedPatchTextElements("elliptical_disc") == ["x0", "y0", "z0", "a", "b", "normal", "rotation", "number", "spacing", "max_fails", "restrict_to_domain"]

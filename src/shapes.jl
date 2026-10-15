@@ -4,6 +4,7 @@
 A region in which cells are placed (a patch) or from which they are removed (a carveout), defined in the local coordinates of a [`Frame`](@ref).
 
 Every shape implements [`sampleUniform`](@ref), [`inside`](@ref), and [`bounds`](@ref).
+See the manual page "Adding a new shape" for how to add one.
 """
 abstract type Shape end
 
@@ -61,6 +62,19 @@ struct Rectangle <: PlanarShape
     end
 end
 
+"""
+    Segment(length)
+
+The straight line segment from `(-length/2, 0)` to `(length/2, 0)` in its frame, i.e. a one-dimensional arrangement of cells along the frame's local x direction.
+"""
+struct Segment <: PlanarShape
+    length::Float64
+    function Segment(length::Real)
+        @assert length > 0 "The length of a line must be positive. Got $(length)."
+        return new(length)
+    end
+end
+
 ellipseFunctional(c1::Real, c2::Real, a::Real, b::Real) = (c1 / a)^2 + (c2 / b)^2
 
 """
@@ -101,6 +115,10 @@ function inside(shape::Rectangle, c1::AbstractVector{<:Real}, c2::AbstractVector
     return (abs.(c1) .<= shape.width / 2 + tol) .& (abs.(c2) .<= shape.height / 2 + tol)
 end
 
+function inside(shape::Segment, c1::AbstractVector{<:Real}, c2::AbstractVector{<:Real}; tol::Real=0.0)
+    return (abs.(c1) .<= shape.length / 2 + tol) .& (abs.(c2) .<= tol)
+end
+
 """
     bounds(shape)
 
@@ -109,6 +127,7 @@ Half-width and half-height of the smallest axis-aligned box (in local coordinate
 bounds(shape::EllipticalDisc) = (shape.a, shape.b)
 bounds(shape::EllipticalRing) = (shape.a + shape.thickness, shape.b + shape.thickness)
 bounds(shape::Rectangle) = (shape.width / 2, shape.height / 2)
+bounds(shape::Segment) = (shape.length / 2, 0.0)
 
 """
     sampleUniform(shape, n)
@@ -150,4 +169,8 @@ end
 
 function sampleUniform(shape::Rectangle, n::Int)
     return shape.width .* (rand(n) .- 0.5), shape.height .* (rand(n) .- 0.5)
+end
+
+function sampleUniform(shape::Segment, n::Int)
+    return shape.length .* (rand(n) .- 0.5), zeros(n)
 end
